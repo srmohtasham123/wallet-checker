@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Wallet Checker — چک موجودی چندشبکه‌ای</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div class="app">
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">◆</span>
+      <span class="brand-name">wallet-checker</span>
+    </div>
+    <div class="topbar-meta">
+      <span id="chainCount">— شبکه</span>
+      <span class="dot">·</span>
+      <span>RPC مستقیم، بدون API key</span>
+    </div>
+  </header>
+
+  <main class="layout">
+
+    <!-- ستون کنترل -->
+    <section class="panel panel-control">
+      <div class="panel-head">
+        <h2>۱. ورودی</h2>
+      </div>
+
+      <label class="field-label" for="chainSelect">شبکه</label>
+      <select id="chainSelect" class="select"></select>
+
+      <label class="field-label" for="addressInput">
+        آدرس‌ها <span class="hint">(هر خط یک آدرس)</span>
+      </label>
+      <textarea
+        id="addressInput"
+        class="textarea"
+        placeholder="0xBF18B110Df46AC5E75d43459d9A89cb0c7c2C6F1
+0x29EB79ac8419ba59141f71B4875f6688f6f3AF48
+..."
+        rows="10"
+      ></textarea>
+      <div class="textarea-meta">
+        <span id="addressCount">۰ آدرس</span>
+      </div>
+
+      <div class="field-label-row">
+        <label class="field-label">توکن‌ها</label>
+        <button id="addTokenBtn" class="btn-link" type="button">+ افزودن توکن کاستوم</button>
+      </div>
+      <div id="tokenList" class="token-list"></div>
+
+      <button id="checkBtn" class="btn-primary" type="button">
+        <span class="btn-text">بررسی موجودی</span>
+      </button>
+
+      <div id="statusLine" class="status-line"></div>
+    </section>
+
+    <!-- ستون نتایج -->
+    <section class="panel panel-results">
+      <div class="panel-head">
+        <h2>۲. نتایج</h2>
+        <div class="results-actions">
+          <button id="exportBtn" class="btn-ghost" type="button" disabled>خروجی CSV</button>
+        </div>
+      </div>
+
+      <div id="emptyState" class="empty-state">
+        <p>هنوز چیزی بررسی نشده.</p>
+        <p class="empty-sub">آدرس‌ها را وارد کن و «بررسی موجودی» را بزن.</p>
+      </div>
+
+      <div id="resultsWrap" class="results-wrap" hidden>
+        <table class="results-table" id="resultsTable">
+          <thead>
+            <tr id="resultsHeadRow"></tr>
+          </thead>
+          <tbody id="resultsBody"></tbody>
+        </table>
+
+        <div class="totals-bar" id="totalsBar"></div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="footer">
+    <span>RPCهای استفاده‌شده عمومی‌اند؛ در صورت کندی، شبکه را عوض کن یا بعداً دوباره امتحان کن.</span>
+  </footer>
+
+</div>
+
+<!-- مودال افزودن توکن کاستوم -->
+<div id="tokenModal" class="modal-overlay" hidden>
+  <div class="modal">
+    <h3>افزودن توکن کاستوم</h3>
+    <label class="field-label">نام/نماد توکن</label>
+    <input id="tokenSymbolInput" class="input" type="text" placeholder="مثلاً USDC" />
+    <label class="field-label">آدرس قرارداد توکن</label>
+    <input id="tokenAddressInput" class="input" type="text" placeholder="0x..." />
+    <label class="field-label">Decimals</label>
+    <input id="tokenDecimalsInput" class="input" type="number" value="18" />
+    <div class="modal-actions">
+      <button id="tokenModalCancel" class="btn-ghost" type="button">انصراف</button>
+      <button id="tokenModalSave" class="btn-primary" type="button">افزودن</button>
+    </div>
+  </div>
+</div>
+
+<script src="chains.js"></script>
+<script src="rpc.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
