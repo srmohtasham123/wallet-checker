@@ -4,10 +4,20 @@
 
 مستقیم با RPC عمومی هر شبکه صحبت می‌کند (`eth_getBalance` برای native، `eth_call` برای توکن‌های ERC-20)، پس به هیچ سرویس واسطی (Etherscan/Blockscout/OKLink و...) وابسته نیست.
 
+## شبکه‌های پشتیبانی‌شده (۲۳ شبکه)
+
+همه Chain ID و RPC از منابع رسمی/chainlist.org در تیر ۱۴۰۵ (ژوئن-جولای ۲۰۲۶) verify شده‌اند. آدرس‌های USDC از [مستندات رسمی Circle](https://developers.circle.com/stablecoins/usdc-contract-addresses) و آدرس‌های WETH از Etherscan/Basescan/Arbiscan رسمی گرفته شده‌اند.
+
+### پرطرفدار (بر اساس TVL)
+Ethereum · BNB Smart Chain · Base · Arbitrum One · Avalanche C-Chain · Polygon PoS · OP Mainnet · Gnosis Chain · Linea · zkSync Era · Scroll · Polygon zkEVM (در حال منسوخ‌شدن) · Xai Network
+
+### کم‌فعال / تخصصی‌تر
+Soneium · Taiko · RARI Chain · Redstone · Superposition · Mantle · Cronos · Celo · Sonic (جانشین Fantom) · Moonbeam
+
 ## ویژگی‌ها
 
 - بررسی batch چند آدرس هم‌زمان (هر خط یک آدرس)
-- پشتیبانی چند شبکه از پیش تنظیم‌شده (قابل گسترش در `chains.js`)
+- ۲۳ شبکه از پیش تنظیم‌شده، گروه‌بندی‌شده به پرطرفدار/کم‌فعال (قابل گسترش در `chains.js`)
 - افزودن توکن ERC-20 کاستوم از داخل رابط کاربری (ذخیره در `localStorage`)
 - جمع کل هر توکن/native در پایین جدول
 - خروجی CSV

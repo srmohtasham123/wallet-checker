@@ -158,6 +158,17 @@ body {
   transition: border-color 0.15s ease;
 }
 
+.chain-note {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: rgba(240, 180, 41, 0.08);
+  border: 1px solid rgba(240, 180, 41, 0.25);
+  border-radius: var(--radius-sm);
+  color: var(--warn);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 .select:focus, .input:focus, .textarea:focus {
   outline: none;
   border-color: var(--accent);
@@ -405,11 +416,30 @@ body {
   max-width: 360px;
 }
 
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
 .modal h3 {
-  margin: 0 0 4px;
+  margin: 0;
   font-size: 14px;
   font-weight: 600;
 }
+
+.modal-close {
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 3px;
+  line-height: 1;
+}
+.modal-close:hover { color: var(--text-primary); background: rgba(255,255,255,0.05); }
 
 .modal-actions {
   display: flex;

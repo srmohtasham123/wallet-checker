@@ -26,6 +26,7 @@ const tokenAddressInput = document.getElementById("tokenAddressInput");
 const tokenDecimalsInput = document.getElementById("tokenDecimalsInput");
 const tokenModalCancel = document.getElementById("tokenModalCancel");
 const tokenModalSave = document.getElementById("tokenModalSave");
+const tokenModalClose = document.getElementById("tokenModalClose");
 
 // ===== Init =====
 
@@ -33,20 +34,35 @@ function init() {
   const ids = Object.keys(CHAINS);
   chainCount.textContent = `${ids.length} شبکه`;
 
+  const groups = { "پرطرفدار": [], "کم‌فعال": [] };
   ids.forEach((id) => {
-    const opt = document.createElement("option");
-    opt.value = id;
-    opt.textContent = CHAINS[id].name;
-    chainSelect.appendChild(opt);
+    const g = CHAINS[id].group || "سایر";
+    if (!groups[g]) groups[g] = [];
+    groups[g].push(id);
+  });
+
+  Object.entries(groups).forEach(([groupName, chainIds]) => {
+    if (chainIds.length === 0) return;
+    const optgroup = document.createElement("optgroup");
+    optgroup.label = groupName;
+    chainIds.forEach((id) => {
+      const opt = document.createElement("option");
+      opt.value = id;
+      opt.textContent = CHAINS[id].name;
+      optgroup.appendChild(opt);
+    });
+    chainSelect.appendChild(optgroup);
   });
 
   currentChainId = ids[0];
   chainSelect.value = currentChainId;
   renderTokenList();
+  renderChainNote();
 
   chainSelect.addEventListener("change", () => {
     currentChainId = chainSelect.value;
     renderTokenList();
+    renderChainNote();
     resetResults();
   });
 
@@ -58,7 +74,35 @@ function init() {
 
   addTokenBtn.addEventListener("click", () => openTokenModal());
   tokenModalCancel.addEventListener("click", closeTokenModal);
+  tokenModalClose.addEventListener("click", closeTokenModal);
   tokenModalSave.addEventListener("click", saveCustomTokenFromModal);
+
+  // کلیک روی پس‌زمینه تیره (بیرون خود باکس مودال) هم مودال را می‌بندد
+  tokenModal.addEventListener("click", (e) => {
+    if (e.target === tokenModal) closeTokenModal();
+  });
+
+  // کلید Escape هم مودال را می‌بندد
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !tokenModal.hidden) closeTokenModal();
+  });
+}
+
+function renderChainNote() {
+  const chain = CHAINS[currentChainId];
+  let noteEl = document.getElementById("chainNote");
+  if (!noteEl) {
+    noteEl = document.createElement("div");
+    noteEl.id = "chainNote";
+    noteEl.className = "chain-note";
+    chainSelect.insertAdjacentElement("afterend", noteEl);
+  }
+  if (chain.note) {
+    noteEl.textContent = `⚠ ${chain.note}`;
+    noteEl.hidden = false;
+  } else {
+    noteEl.hidden = true;
+  }
 }
 
 // ===== Address input =====
