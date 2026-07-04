@@ -146,6 +146,17 @@ body {
 }
 .field-label-row .field-label { margin: 0; }
 
+.token-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.btn-link-muted {
+  color: var(--text-faint);
+}
+.btn-link-muted:hover { color: var(--error); }
+
 .select, .input, .textarea {
   width: 100%;
   background: var(--bg-elevated);
@@ -396,58 +407,39 @@ body {
   color: var(--accent);
 }
 
-/* ===== Modal ===== */
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.6);
+/* ===== Inline token form (بدون overlay - همیشه در دل صفحه) ===== */
+.token-form {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-}
-
-.modal {
-  background: var(--bg-panel);
+  flex-direction: column;
+  gap: 8px;
+  background: var(--bg-elevated);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 24px;
-  width: 100%;
-  max-width: 360px;
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  margin-bottom: 10px;
 }
 
-.modal-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 4px;
-}
-
-.modal h3 {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.modal-close {
-  background: none;
-  border: none;
-  color: var(--text-faint);
-  font-size: 16px;
-  cursor: pointer;
-  padding: 2px 6px;
-  border-radius: 3px;
-  line-height: 1;
-}
-.modal-close:hover { color: var(--text-primary); background: rgba(255,255,255,0.05); }
-
-.modal-actions {
+.token-form-row {
   display: flex;
   gap: 8px;
-  margin-top: 18px;
 }
-.modal-actions .btn-primary { margin-top: 0; }
-.modal-actions button { flex: 1; }
+
+.token-form-row .input {
+  flex: 1;
+}
+
+.btn-small {
+  width: auto;
+  margin-top: 0;
+  padding: 8px 14px;
+  white-space: nowrap;
+}
+
+.token-form-error {
+  font-size: 11px;
+  color: var(--error);
+  padding: 4px 2px;
+}
 
 /* ===== Footer ===== */
 .footer {

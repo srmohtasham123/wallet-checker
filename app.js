@@ -20,13 +20,14 @@ const exportBtn = document.getElementById("exportBtn");
 const chainCount = document.getElementById("chainCount");
 
 const addTokenBtn = document.getElementById("addTokenBtn");
-const tokenModal = document.getElementById("tokenModal");
+const clearCustomTokensBtn = document.getElementById("clearCustomTokensBtn");
+const tokenForm = document.getElementById("tokenForm");
 const tokenSymbolInput = document.getElementById("tokenSymbolInput");
 const tokenAddressInput = document.getElementById("tokenAddressInput");
 const tokenDecimalsInput = document.getElementById("tokenDecimalsInput");
-const tokenModalCancel = document.getElementById("tokenModalCancel");
-const tokenModalSave = document.getElementById("tokenModalSave");
-const tokenModalClose = document.getElementById("tokenModalClose");
+const tokenFormSave = document.getElementById("tokenFormSave");
+const tokenFormCancel = document.getElementById("tokenFormCancel");
+const tokenFormError = document.getElementById("tokenFormError");
 
 // ===== Init =====
 
@@ -72,20 +73,10 @@ function init() {
   checkBtn.addEventListener("click", runCheck);
   exportBtn.addEventListener("click", exportCsv);
 
-  addTokenBtn.addEventListener("click", () => openTokenModal());
-  tokenModalCancel.addEventListener("click", closeTokenModal);
-  tokenModalClose.addEventListener("click", closeTokenModal);
-  tokenModalSave.addEventListener("click", saveCustomTokenFromModal);
-
-  // کلیک روی پس‌زمینه تیره (بیرون خود باکس مودال) هم مودال را می‌بندد
-  tokenModal.addEventListener("click", (e) => {
-    if (e.target === tokenModal) closeTokenModal();
-  });
-
-  // کلید Escape هم مودال را می‌بندد
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && !tokenModal.hidden) closeTokenModal();
-  });
+  addTokenBtn.addEventListener("click", toggleTokenForm);
+  tokenFormCancel.addEventListener("click", closeTokenForm);
+  tokenFormSave.addEventListener("click", saveCustomTokenFromForm);
+  clearCustomTokensBtn.addEventListener("click", clearAllCustomTokensForCurrentChain);
 }
 
 function renderChainNote() {
@@ -133,6 +124,8 @@ function renderTokenList() {
   tokenList.innerHTML = "";
   const tokens = getTokensForChain(currentChainId);
   const baseCount = (CHAINS[currentChainId].defaultTokens || []).length;
+  const hasCustom = tokens.length > baseCount;
+  clearCustomTokensBtn.hidden = !hasCustom;
 
   tokens.forEach((token, idx) => {
     const isCustom = idx >= baseCount;
@@ -179,6 +172,16 @@ function renderTokenList() {
   });
 }
 
+function clearAllCustomTokensForCurrentChain() {
+  const all = loadCustomTokens();
+  if (!all[currentChainId] || all[currentChainId].length === 0) return;
+  const count = all[currentChainId].length;
+  if (!confirm(`${count} توکن کاستوم این شبکه پاک شود؟`)) return;
+  all[currentChainId] = [];
+  saveCustomTokens(all);
+  renderTokenList();
+}
+
 function getCheckedTokens() {
   const boxes = tokenList.querySelectorAll('input[type="checkbox"]:checked');
   return Array.from(boxes).map((b) => ({
@@ -193,32 +196,50 @@ function shortenAddress(addr) {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 
-// ===== Custom token modal =====
+// ===== Custom token inline form =====
 
-function openTokenModal() {
+function toggleTokenForm() {
+  const isHidden = tokenForm.hidden;
+  if (isHidden) {
+    openTokenForm();
+  } else {
+    closeTokenForm();
+  }
+}
+
+function openTokenForm() {
+  tokenForm.hidden = false;
   tokenSymbolInput.value = "";
   tokenAddressInput.value = "";
   tokenDecimalsInput.value = "18";
-  tokenModal.hidden = false;
+  tokenFormError.hidden = true;
+  addTokenBtn.textContent = "− بستن فرم";
   tokenSymbolInput.focus();
 }
 
-function closeTokenModal() {
-  tokenModal.hidden = true;
+function closeTokenForm() {
+  tokenForm.hidden = true;
+  tokenFormError.hidden = true;
+  addTokenBtn.textContent = "+ افزودن توکن کاستوم";
 }
 
-function saveCustomTokenFromModal() {
+function showTokenFormError(msg) {
+  tokenFormError.textContent = msg;
+  tokenFormError.hidden = false;
+}
+
+function saveCustomTokenFromForm() {
   const symbol = tokenSymbolInput.value.trim();
   const address = tokenAddressInput.value.trim();
   const decimals = parseInt(tokenDecimalsInput.value, 10);
 
-  if (!symbol) return alert("نماد توکن را وارد کن.");
-  if (!isValidAddress(address)) return alert("آدرس قرارداد توکن معتبر نیست.");
-  if (isNaN(decimals) || decimals < 0 || decimals > 36) return alert("Decimals نامعتبر است.");
+  if (!symbol) return showTokenFormError("نماد توکن را وارد کن.");
+  if (!isValidAddress(address)) return showTokenFormError("آدرس قرارداد توکن معتبر نیست (باید 0x + 40 کاراکتر باشد).");
+  if (isNaN(decimals) || decimals < 0 || decimals > 36) return showTokenFormError("Decimals نامعتبر است.");
 
   addCustomToken(currentChainId, { symbol, address, decimals });
   renderTokenList();
-  closeTokenModal();
+  closeTokenForm();
 }
 
 // ===== Run check =====

@@ -50,8 +50,24 @@
 
       <div class="field-label-row">
         <label class="field-label">توکن‌ها</label>
-        <button id="addTokenBtn" class="btn-link" type="button">+ افزودن توکن کاستوم</button>
+        <div class="token-actions">
+          <button id="clearCustomTokensBtn" class="btn-link btn-link-muted" type="button" hidden>پاک‌کردن کاستوم‌ها</button>
+          <button id="addTokenBtn" class="btn-link" type="button">+ افزودن توکن کاستوم</button>
+        </div>
       </div>
+
+      <!-- فرم افزودن توکن کاستوم - همیشه داخل خود صفحه، بدون پاپ‌آپ -->
+      <div id="tokenForm" class="token-form" hidden>
+        <input id="tokenSymbolInput" class="input" type="text" placeholder="نماد توکن، مثلاً USDC" />
+        <input id="tokenAddressInput" class="input" type="text" placeholder="آدرس قرارداد 0x..." />
+        <div class="token-form-row">
+          <input id="tokenDecimalsInput" class="input" type="number" value="18" placeholder="Decimals" />
+          <button id="tokenFormSave" class="btn-primary btn-small" type="button">افزودن</button>
+          <button id="tokenFormCancel" class="btn-ghost btn-small" type="button">انصراف</button>
+        </div>
+        <div id="tokenFormError" class="token-form-error" hidden></div>
+      </div>
+
       <div id="tokenList" class="token-list"></div>
 
       <button id="checkBtn" class="btn-primary" type="button">
@@ -93,26 +109,6 @@
     <span>RPCهای استفاده‌شده عمومی‌اند؛ در صورت کندی، شبکه را عوض کن یا بعداً دوباره امتحان کن.</span>
   </footer>
 
-</div>
-
-<!-- مودال افزودن توکن کاستوم -->
-<div id="tokenModal" class="modal-overlay" hidden>
-  <div class="modal">
-    <div class="modal-head">
-      <h3>افزودن توکن کاستوم</h3>
-      <button id="tokenModalClose" class="modal-close" type="button" aria-label="بستن">✕</button>
-    </div>
-    <label class="field-label">نام/نماد توکن</label>
-    <input id="tokenSymbolInput" class="input" type="text" placeholder="مثلاً USDC" />
-    <label class="field-label">آدرس قرارداد توکن</label>
-    <input id="tokenAddressInput" class="input" type="text" placeholder="0x..." />
-    <label class="field-label">Decimals</label>
-    <input id="tokenDecimalsInput" class="input" type="number" value="18" />
-    <div class="modal-actions">
-      <button id="tokenModalCancel" class="btn-ghost" type="button">انصراف</button>
-      <button id="tokenModalSave" class="btn-primary" type="button">افزودن</button>
-    </div>
-  </div>
 </div>
 
 <script src="chains.js"></script>
