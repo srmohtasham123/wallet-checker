@@ -300,7 +300,7 @@ async function runCheck() {
 
 function buildResultsHeader(tokens) {
   resultsHeadRow.innerHTML = "";
-  const cols = ["آدرس", CHAINS[currentChainId].nativeSymbol, ...tokens.map((t) => t.symbol)];
+  const cols = ["آدرس", `${CHAINS[currentChainId].nativeSymbol} (native)`, ...tokens.map((t) => t.symbol)];
   cols.forEach((c) => {
     const th = document.createElement("th");
     th.textContent = c;
