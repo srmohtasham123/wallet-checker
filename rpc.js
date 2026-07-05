@@ -36,7 +36,9 @@ async function rpcCall(rpcUrls, method, params) {
  */
 async function getNativeBalance(rpcUrls, address) {
   const hex = await rpcCall(rpcUrls, "eth_getBalance", [address, "latest"]);
-  return BigInt(hex);
+  const raw = BigInt(hex);
+  console.debug(`[wallet-checker] native balance ${address} = ${hex} = ${raw.toString()} wei`);
+  return raw;
 }
 
 /**
