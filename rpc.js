@@ -4,10 +4,17 @@
 
 /**
  * یک درخواست JSON-RPC به یک یا چند RPC امتحان می‌کند تا جواب بگیرد (fallback خودکار)
+ * هر درخواست حداکثر ۸ ثانیه مهلت دارد؛ در صورت timeout یا خطا، سراغ RPC بعدی می‌رود
+ * بدون این timeout، یک RPC آویزان می‌توانست کل عملیات را معطل نگه دارد و مانع از
+ * امتحان RPCهای جایگزین شود.
  */
+const RPC_TIMEOUT_MS = 8000;
+
 async function rpcCall(rpcUrls, method, params) {
   let lastError = null;
   for (const url of rpcUrls) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), RPC_TIMEOUT_MS);
     try {
       const res = await fetch(url, {
         method: "POST",
@@ -18,12 +25,15 @@ async function rpcCall(rpcUrls, method, params) {
           method,
           params,
         }),
+        signal: controller.signal,
       });
+      clearTimeout(timeoutId);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       if (json.error) throw new Error(json.error.message || "RPC error");
       return json.result;
     } catch (e) {
+      clearTimeout(timeoutId);
       lastError = e;
       continue; // امتحان RPC بعدی
     }
