@@ -1,9 +1,10 @@
 // app.js
-// منطق اصلی: i18n، منوی iOS-style انتخاب شبکه، select-all توکن‌ها، اجرای چک، گزارش خلاصه
+// منطق اصلی: i18n، منوی iOS-style انتخاب چند شبکه، select-all توکن‌ها، اجرای چک، گزارش خلاصه
 
-let currentChainId = null;
-let lastResults = [];
-let lastCheckedTokens = [];
+let selectedChainIds = []; // آرایه شبکه‌های انتخاب‌شده برای چک (چندتایی)
+let currentChainId = null; // وقتی فقط یک شبکه انتخاب شده، همون برای پنل توکن‌ها استفاده می‌شه
+let lastRunResults = []; // [{chainId, results, tokens}] برای export بعد از هر چک
+let sheetPendingSelection = []; // انتخاب موقت داخل باتم‌شیت قبل از زدن Apply
 
 // ===== DOM refs =====
 const htmlRoot = document.getElementById("htmlRoot");
@@ -19,6 +20,8 @@ const chainSheet = document.getElementById("chainSheet");
 const sheetCloseBtn = document.getElementById("sheetCloseBtn");
 const chainSearchInput = document.getElementById("chainSearchInput");
 const chainSheetList = document.getElementById("chainSheetList");
+const sheetSelectedCount = document.getElementById("sheetSelectedCount");
+const sheetApplyBtn = document.getElementById("sheetApplyBtn");
 
 const addressInput = document.getElementById("addressInput");
 const addressCount = document.getElementById("addressCount");
@@ -34,17 +37,18 @@ const tokenFormSave = document.getElementById("tokenFormSave");
 const tokenFormCancel = document.getElementById("tokenFormCancel");
 const tokenFormError = document.getElementById("tokenFormError");
 const tokenList = document.getElementById("tokenList");
+const multiChainNote = document.getElementById("multiChainNote");
 
 const checkBtn = document.getElementById("checkBtn");
 const statusLine = document.getElementById("statusLine");
 const emptyState = document.getElementById("emptyState");
 const resultsWrap = document.getElementById("resultsWrap");
-const resultsHeadRow = document.getElementById("resultsHeadRow");
-const resultsBody = document.getElementById("resultsBody");
-const totalsBar = document.getElementById("totalsBar");
 const exportBtn = document.getElementById("exportBtn");
 const reportBtn = document.getElementById("reportBtn");
 const chainCount = document.getElementById("chainCount");
+const reportCardSection = document.getElementById("reportCardSection");
+const reportCardCanvas = document.getElementById("reportCardCanvas");
+const downloadCardBtn = document.getElementById("downloadCardBtn");
 
 // ===== i18n application =====
 
@@ -71,17 +75,23 @@ function applyTranslations() {
   document.getElementById("stepResultsLabel").textContent = t("stepResults");
   exportBtn.textContent = t("exportCsv");
   reportBtn.textContent = t("exportReport");
+  document.getElementById("reportCardLabel").textContent = t("reportCardLabel");
+  downloadCardBtn.textContent = t("downloadImage");
   document.getElementById("emptyTitle").textContent = t("emptyTitle");
   document.getElementById("emptySub").textContent = t("emptySub");
   document.getElementById("footerNote").textContent = t("footerNote");
+  document.getElementById("trustNote").textContent = t("trustNote");
   document.getElementById("sheetTitle").textContent = t("network");
   chainSearchInput.placeholder = t("searchNetwork");
+  sheetApplyBtn.textContent = t("apply");
+  multiChainNote.textContent = t("multiChainNote");
 
   const ids = Object.keys(CHAINS);
   chainCount.textContent = `${ids.length} ${t("chains")}`;
 
   updateAddressCount();
   renderChainPickerButton();
+  renderTokenPanel();
 
   langSwitch.querySelectorAll(".lang-btn").forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.lang === lang);
@@ -97,6 +107,7 @@ function switchLang(lang) {
 
 function init() {
   const ids = Object.keys(CHAINS);
+  selectedChainIds = [ids[0]];
   currentChainId = ids[0];
 
   langSwitch.querySelectorAll(".lang-btn").forEach((btn) => {
@@ -104,7 +115,6 @@ function init() {
   });
 
   applyTranslations();
-  renderTokenList();
 
   chainPickerBtn.addEventListener("click", openChainSheet);
   sheetCloseBtn.addEventListener("click", closeChainSheet);
@@ -115,6 +125,7 @@ function init() {
     if (e.key === "Escape" && !chainSheetOverlay.hidden) closeChainSheet();
   });
   chainSearchInput.addEventListener("input", () => renderChainSheetList(chainSearchInput.value));
+  sheetApplyBtn.addEventListener("click", applyChainSelection);
 
   addressInput.addEventListener("input", updateAddressCount);
 
@@ -127,21 +138,28 @@ function init() {
   checkBtn.addEventListener("click", runCheck);
   exportBtn.addEventListener("click", exportCsv);
   reportBtn.addEventListener("click", exportSummaryReport);
+  downloadCardBtn.addEventListener("click", downloadReportCardImage);
 }
 
-// ===== Chain picker (iOS-style bottom sheet) =====
+// ===== Chain picker (iOS-style bottom sheet, multi-select) =====
 
 function renderChainPickerButton() {
-  const chain = CHAINS[currentChainId];
-  chainPickerIcon.textContent = chain.icon || "●";
-  chainPickerIcon.style.background = hexToSoft(chain.color);
-  chainPickerIcon.style.color = chain.color;
-  chainPickerName.textContent = chain.name;
+  if (selectedChainIds.length === 1) {
+    const chain = CHAINS[selectedChainIds[0]];
+    chainPickerIcon.textContent = chain.icon || "●";
+    chainPickerIcon.style.background = hexToSoft(chain.color);
+    chainPickerIcon.style.color = chain.color;
+    chainPickerName.textContent = chain.name;
+  } else {
+    chainPickerIcon.textContent = "⬢";
+    chainPickerIcon.style.background = "var(--accent-soft)";
+    chainPickerIcon.style.color = "var(--accent)";
+    chainPickerName.textContent = t("networksSelected", { count: selectedChainIds.length });
+  }
   renderChainNote();
 }
 
 function hexToSoft(hex) {
-  // یک نسخه کم‌رنگ از رنگ شبکه برای پس‌زمینه آیکون می‌سازد
   if (!hex) return "var(--accent-soft)";
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
@@ -150,14 +168,29 @@ function hexToSoft(hex) {
 }
 
 function openChainSheet() {
+  sheetPendingSelection = [...selectedChainIds];
   chainSheetOverlay.hidden = false;
   chainSearchInput.value = "";
-  renderChainSheetList("");
+  // requestAnimationFrame تضمین می‌کند رندر لیست بعد از این‌که مرورگر layout
+  // مربوط به نمایان‌شدن overlay را کامل کرد اتفاق بیفتد (محافظ اضافه در کنار
+  // فیکس flexbox مربوطه، برای اطمینان بیشتر در مرورگرهای موبایل)
+  requestAnimationFrame(() => renderChainSheetList(""));
   setTimeout(() => chainSearchInput.focus(), 50);
 }
 
 function closeChainSheet() {
   chainSheetOverlay.hidden = true;
+}
+
+function applyChainSelection() {
+  if (sheetPendingSelection.length === 0) return; // حداقل یک شبکه باید انتخاب باشد
+  selectedChainIds = [...sheetPendingSelection];
+  currentChainId = selectedChainIds.length === 1 ? selectedChainIds[0] : currentChainId;
+  if (!selectedChainIds.includes(currentChainId)) currentChainId = selectedChainIds[0];
+  renderChainPickerButton();
+  renderTokenPanel();
+  resetResults();
+  closeChainSheet();
 }
 
 function renderChainSheetList(query) {
@@ -167,6 +200,8 @@ function renderChainSheetList(query) {
     if (!q) return true;
     return CHAINS[id].name.toLowerCase().includes(q) || id.includes(q);
   });
+
+  updateSheetSelectedCount();
 
   if (ids.length === 0) {
     const empty = document.createElement("div");
@@ -186,15 +221,44 @@ function renderChainSheetList(query) {
 
   ["popular", "niche"].forEach((groupKey) => {
     if (groups[groupKey].length === 0) return;
-    const label = document.createElement("div");
+
+    const labelRow = document.createElement("div");
+    labelRow.className = "sheet-group-row";
+
+    const label = document.createElement("span");
     label.className = "sheet-group-label";
     label.textContent = groupLabels[groupKey];
-    chainSheetList.appendChild(label);
+
+    const groupCheckbox = document.createElement("input");
+    groupCheckbox.type = "checkbox";
+    groupCheckbox.className = "sheet-group-checkbox";
+    const allInGroupSelected = groups[groupKey].every((id) => sheetPendingSelection.includes(id));
+    groupCheckbox.checked = allInGroupSelected;
+    groupCheckbox.addEventListener("change", () => {
+      if (groupCheckbox.checked) {
+        groups[groupKey].forEach((id) => {
+          if (!sheetPendingSelection.includes(id)) sheetPendingSelection.push(id);
+        });
+      } else {
+        sheetPendingSelection = sheetPendingSelection.filter((id) => !groups[groupKey].includes(id));
+      }
+      renderChainSheetList(chainSearchInput.value);
+    });
+
+    labelRow.appendChild(groupCheckbox);
+    labelRow.appendChild(label);
+    chainSheetList.appendChild(labelRow);
 
     groups[groupKey].forEach((id) => {
       const chain = CHAINS[id];
+      const isSelected = sheetPendingSelection.includes(id);
       const item = document.createElement("div");
-      item.className = "sheet-item" + (id === currentChainId ? " selected" : "");
+      item.className = "sheet-item" + (isSelected ? " selected" : "");
+
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.className = "sheet-item-checkbox";
+      checkbox.checked = isSelected;
 
       const icon = document.createElement("span");
       icon.className = "sheet-item-icon";
@@ -206,32 +270,41 @@ function renderChainSheetList(query) {
       name.className = "sheet-item-name";
       name.textContent = chain.name;
 
+      item.appendChild(checkbox);
       item.appendChild(icon);
       item.appendChild(name);
 
-      if (id === currentChainId) {
-        const check = document.createElement("span");
-        check.className = "sheet-item-check";
-        check.textContent = "✓";
-        item.appendChild(check);
-      }
+      const toggle = () => {
+        if (sheetPendingSelection.includes(id)) {
+          sheetPendingSelection = sheetPendingSelection.filter((x) => x !== id);
+        } else {
+          sheetPendingSelection.push(id);
+        }
+        renderChainSheetList(chainSearchInput.value);
+      };
 
-      item.addEventListener("click", () => selectChain(id));
+      checkbox.addEventListener("click", (e) => {
+        e.stopPropagation();
+        toggle();
+      });
+      item.addEventListener("click", toggle);
+
       chainSheetList.appendChild(item);
     });
   });
 }
 
-function selectChain(id) {
-  currentChainId = id;
-  renderChainPickerButton();
-  renderTokenList();
-  resetResults();
-  closeChainSheet();
+function updateSheetSelectedCount() {
+  sheetSelectedCount.textContent = t("networksSelected", { count: sheetPendingSelection.length });
+  sheetApplyBtn.disabled = sheetPendingSelection.length === 0;
 }
 
 function renderChainNote() {
-  const chain = CHAINS[currentChainId];
+  if (selectedChainIds.length !== 1) {
+    chainNote.hidden = true;
+    return;
+  }
+  const chain = CHAINS[selectedChainIds[0]];
   if (chain.note) {
     chainNote.textContent = `⚠ ${chain.note}`;
     chainNote.hidden = false;
@@ -249,20 +322,55 @@ function parseAddresses() {
     .filter((l) => l.length > 0);
 }
 
-function isValidAddress(addr) {
+function isValidEvmAddress(addr) {
   return /^0x[a-fA-F0-9]{40}$/.test(addr);
+}
+
+// isValidSolanaAddress از rpc-solana.js میاد (global scope مشترک)
+
+function isValidAddressForChain(addr, chainId) {
+  const chain = CHAINS[chainId];
+  if (!chain) return false;
+  if (chain.chainType === "solana") return isValidSolanaAddress(addr);
+  return isValidEvmAddress(addr);
+}
+
+function isAddressValidForAnySelected(addr) {
+  return selectedChainIds.some((id) => isValidAddressForChain(addr, id));
 }
 
 function updateAddressCount() {
   const all = parseAddresses();
-  const valid = all.filter(isValidAddress);
+  const valid = all.filter(isAddressValidForAnySelected);
   const invalidCount = all.length - valid.length;
   let label = `${all.length} ${t("addressCount")}`;
   if (invalidCount > 0) label += ` (${invalidCount} ${t("invalid")})`;
   addressCount.textContent = label;
 }
 
-// ===== Token list rendering =====
+// ===== Token panel: full UI for single chain, simplified note for multi-chain =====
+
+function renderTokenPanel() {
+  const isSingle = selectedChainIds.length === 1;
+
+  tokenList.hidden = !isSingle;
+  selectAllTokensBtn.hidden = !isSingle;
+  addTokenBtn.hidden = !isSingle;
+  clearCustomTokensBtn.hidden = !isSingle || !hasCustomTokensForCurrentChain();
+  multiChainNote.hidden = isSingle;
+
+  if (isSingle) {
+    currentChainId = selectedChainIds[0];
+    renderTokenList();
+  } else {
+    closeTokenForm();
+  }
+}
+
+function hasCustomTokensForCurrentChain() {
+  const all = loadCustomTokens();
+  return !!(all[currentChainId] && all[currentChainId].length > 0);
+}
 
 function renderTokenList() {
   tokenList.innerHTML = "";
@@ -371,7 +479,7 @@ function saveCustomTokenFromForm() {
   const decimals = parseInt(tokenDecimalsInput.value, 10);
 
   if (!symbol) return showTokenFormError(t("errSymbol"));
-  if (!isValidAddress(address)) return showTokenFormError(t("errAddress"));
+  if (!isValidAddressForChain(address, currentChainId)) return showTokenFormError(t("errAddress"));
   if (isNaN(decimals) || decimals < 0 || decimals > 36) return showTokenFormError(t("errDecimals"));
 
   addCustomToken(currentChainId, { symbol, address, decimals });
@@ -389,15 +497,16 @@ function clearAllCustomTokensForCurrentChain() {
   renderTokenList();
 }
 
-// ===== Run check =====
+// ===== Run check (multi-chain aware) =====
 
 function resetResults() {
   emptyState.hidden = false;
   resultsWrap.hidden = true;
+  resultsWrap.innerHTML = "";
+  reportCardSection.hidden = true;
   exportBtn.disabled = true;
   reportBtn.disabled = true;
-  lastResults = [];
-  lastCheckedTokens = [];
+  lastRunResults = [];
 }
 
 function setStatus(text, kind) {
@@ -406,56 +515,130 @@ function setStatus(text, kind) {
 }
 
 async function runCheck() {
-  const addresses = parseAddresses().filter(isValidAddress);
-  if (addresses.length === 0) {
+  const allAddresses = parseAddresses();
+  const anyValid = allAddresses.some(isAddressValidForAnySelected);
+  if (!anyValid) {
     setStatus(t("errNoAddress"), "error");
     return;
   }
 
-  const tokens = getCheckedTokens();
-  const chain = CHAINS[currentChainId];
-
   checkBtn.disabled = true;
-  setStatus(t("statusChecking", { count: addresses.length, chain: chain.name }), "active");
-
   emptyState.hidden = true;
   resultsWrap.hidden = false;
-  buildResultsHeader(tokens);
-  resultsBody.innerHTML = "";
+  resultsWrap.innerHTML = "";
+  lastRunResults = [];
 
-  const rowEls = addresses.map((addr) => buildLoadingRow(addr, tokens));
-  rowEls.forEach((row) => resultsBody.appendChild(row.tr));
+  const isSingle = selectedChainIds.length === 1;
 
-  const results = [];
-  let completed = 0;
+  // برای هر شبکه، فقط آدرس‌هایی که فرمتشان با نوع آن شبکه (EVM یا سولانا) مطابقت دارد چک می‌شوند
+  const perChainAddresses = {};
+  selectedChainIds.forEach((chainId) => {
+    perChainAddresses[chainId] = allAddresses.filter((a) => isValidAddressForChain(a, chainId));
+  });
 
-  await Promise.all(
-    addresses.map(async (addr, i) => {
-      const result = await checkAddressOnChain(chain, addr, tokens);
-      results[i] = result;
-      fillRow(rowEls[i], result, tokens);
-      completed++;
-      setStatus(t("statusProgress", { done: completed, total: addresses.length }), "active");
-    })
-  );
+  let totalDone = 0;
+  const totalWork = selectedChainIds.reduce((sum, id) => sum + perChainAddresses[id].length, 0);
 
-  lastResults = results;
-  lastCheckedTokens = tokens;
-  renderTotals(results, tokens, chain);
-  setStatus(t("statusDone", { count: addresses.length, chain: chain.name }), "");
+  for (const chainId of selectedChainIds) {
+    const chain = CHAINS[chainId];
+    const addresses = perChainAddresses[chainId];
+    const tokens = isSingle ? getCheckedTokens() : (chain.defaultTokens || []);
+    const checkFn = chain.chainType === "solana" ? checkSolanaAddressOnChain : checkAddressOnChain;
+
+    if (addresses.length === 0) {
+      // هیچ آدرسی با فرمت این شبکه مطابقت نداشت (مثلاً فقط آدرس EVM دادی ولی سولانا هم انتخاب کردی)
+      const section = buildChainSection(chain, tokens, []);
+      const emptyMsg = document.createElement("div");
+      emptyMsg.className = "chain-section-empty";
+      emptyMsg.textContent = "—";
+      section.container.appendChild(emptyMsg);
+      resultsWrap.appendChild(section.container);
+      continue;
+    }
+
+    setStatus(t("statusChecking", { count: addresses.length, chain: chain.name }), "active");
+
+    const section = buildChainSection(chain, tokens, addresses);
+    resultsWrap.appendChild(section.container);
+
+    const results = [];
+    await Promise.all(
+      addresses.map(async (addr, i) => {
+        const result = await checkFn(chain, addr, tokens);
+        results[i] = result;
+        fillRow(section.rowEls[i], result, tokens);
+        totalDone++;
+        setStatus(t("statusProgress", { done: totalDone, total: totalWork }), "active");
+      })
+    );
+
+    renderChainTotals(section.totalsBar, results, tokens, chain);
+    lastRunResults.push({ chainId, chain, results, tokens });
+  }
+
+  const chainNames = selectedChainIds.map((id) => CHAINS[id].name).join(", ");
+  setStatus(t("statusDone", { count: totalWork, chain: chainNames }), "");
   checkBtn.disabled = false;
   exportBtn.disabled = false;
   reportBtn.disabled = false;
+
+  if (lastRunResults.length > 0) {
+    reportCardSection.hidden = false;
+    await renderReportCard();
+  }
 }
 
-function buildResultsHeader(tokens) {
-  resultsHeadRow.innerHTML = "";
-  const cols = ["Address", `${CHAINS[currentChainId].nativeSymbol} (${t("native")})`, ...tokens.map((t) => t.symbol)];
+function buildChainSection(chain, tokens, addresses) {
+  const container = document.createElement("div");
+  container.className = "chain-section";
+
+  if (selectedChainIds.length > 1) {
+    const heading = document.createElement("div");
+    heading.className = "chain-section-heading";
+    const icon = document.createElement("span");
+    icon.className = "chain-section-icon";
+    icon.textContent = chain.icon || "●";
+    icon.style.background = hexToSoft(chain.color);
+    icon.style.color = chain.color;
+    const name = document.createElement("span");
+    name.textContent = chain.name;
+    heading.appendChild(icon);
+    heading.appendChild(name);
+    container.appendChild(heading);
+  }
+
+  if (addresses.length === 0) {
+    return { container, rowEls: [], totalsBar: document.createElement("div") };
+  }
+
+  const table = document.createElement("table");
+  table.className = "results-table";
+  const thead = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  const cols = [t("address"), `${chain.nativeSymbol} (${t("native")})`, ...tokens.map((tk) => tk.symbol)];
   cols.forEach((c) => {
     const th = document.createElement("th");
     th.textContent = c;
-    resultsHeadRow.appendChild(th);
+    headRow.appendChild(th);
   });
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  const rowEls = addresses.map((addr) => {
+    const row = buildLoadingRow(addr, tokens);
+    tbody.appendChild(row.tr);
+    return row;
+  });
+  table.appendChild(tbody);
+
+  const totalsBar = document.createElement("div");
+  totalsBar.className = "totals-bar";
+
+  container.appendChild(table);
+  container.appendChild(totalsBar);
+
+  return { container, rowEls, totalsBar };
 }
 
 function buildLoadingRow(address, tokens) {
@@ -530,7 +713,7 @@ function formatDisplay(value) {
   return `${whole}.${frac.slice(0, 6)}`;
 }
 
-function renderTotals(results, tokens, chain) {
+function renderChainTotals(totalsBar, results, tokens, chain) {
   totalsBar.innerHTML = "";
 
   const nativeTotal = results.reduce((sum, r) => {
@@ -563,75 +746,79 @@ function buildTotalItem(label, value) {
   return div;
 }
 
-// ===== Export CSV =====
+// ===== Export CSV (multi-chain aware) =====
 
 function exportCsv() {
-  if (lastResults.length === 0) return;
-  const tokens = lastCheckedTokens;
-  const chain = CHAINS[currentChainId];
+  if (lastRunResults.length === 0) return;
 
-  const headers = ["address", chain.nativeSymbol, ...tokens.map((tk) => tk.symbol)];
-  const rows = lastResults.map((r) => {
-    const nativeVal = r.native.error ? "ERROR" : r.native.formatted;
-    const tokenVals = tokens.map((token) => {
-      const tr = r.tokens.find((tk) => tk.address.toLowerCase() === token.address.toLowerCase());
-      if (!tr) return "";
-      return tr.error ? "ERROR" : tr.formatted;
+  const lines = [];
+  lastRunResults.forEach(({ chain, results, tokens }) => {
+    lines.push(`# ${chain.name}`);
+    const headers = ["address", chain.nativeSymbol, ...tokens.map((tk) => tk.symbol)];
+    lines.push(headers.join(","));
+    results.forEach((r) => {
+      const nativeVal = r.native.error ? "ERROR" : r.native.formatted;
+      const tokenVals = tokens.map((token) => {
+        const tr = r.tokens.find((tk) => tk.address.toLowerCase() === token.address.toLowerCase());
+        if (!tr) return "";
+        return tr.error ? "ERROR" : tr.formatted;
+      });
+      lines.push([r.address, nativeVal, ...tokenVals].join(","));
     });
-    return [r.address, nativeVal, ...tokenVals];
+    lines.push("");
   });
 
-  const csv = [headers, ...rows].map((row) => row.join(",")).join("\n");
-  downloadFile(csv, `wallet-balances-${chain.id}-${Date.now()}.csv`, "text/csv;charset=utf-8;");
+  const filenamePart = lastRunResults.length === 1 ? lastRunResults[0].chain.id : "multichain";
+  downloadFile(lines.join("\n"), `wallet-balances-${filenamePart}-${Date.now()}.csv`, "text/csv;charset=utf-8;");
 }
 
-// ===== Export summary report =====
+// ===== Export summary report (multi-chain aware) =====
 
 function exportSummaryReport() {
-  if (lastResults.length === 0) return;
-  const tokens = lastCheckedTokens;
-  const chain = CHAINS[currentChainId];
-
-  const nativeTotal = lastResults.reduce((sum, r) => r.native.error ? sum : sum + parseFloat(r.native.formatted), 0);
-  const tokenTotals = tokens.map((token) => {
-    const total = lastResults.reduce((sum, r) => {
-      const tr = r.tokens.find((tk) => tk.address.toLowerCase() === token.address.toLowerCase());
-      if (!tr || tr.error) return sum;
-      return sum + parseFloat(tr.formatted);
-    }, 0);
-    return { symbol: token.symbol, total };
-  });
+  if (lastRunResults.length === 0) return;
 
   const lines = [];
   lines.push(`# ${t("reportTitle")}`);
   lines.push("");
   lines.push(`- ${t("reportGenerated")}: ${new Date().toISOString()}`);
-  lines.push(`- ${t("reportChain")}: ${chain.name} (chainId: ${chain.chainNumericId})`);
-  lines.push(`- ${t("reportAddressCount")}: ${lastResults.length}`);
-  lines.push(`- ${t("reportTokensUsed")}: ${chain.nativeSymbol} (${t("native")}), ${tokens.map((tk) => tk.symbol).join(", ") || "—"}`);
+  lines.push(`- ${t("reportAddressCount")}: ${parseAddresses().filter(isAddressValidForAnySelected).length}`);
   lines.push("");
-  lines.push(`## ${t("reportTotals")}`);
-  lines.push("");
-  lines.push(`- ${chain.nativeSymbol}: ${formatDisplay(nativeTotal.toString())}`);
-  tokenTotals.forEach((tt) => {
-    lines.push(`- ${tt.symbol}: ${formatDisplay(tt.total.toString())}`);
-  });
-  lines.push("");
-  lines.push(`## ${t("address")}`);
-  lines.push("");
-  lines.push(`| ${t("address")} | ${chain.nativeSymbol} | ${tokens.map((tk) => tk.symbol).join(" | ")} |`);
-  lines.push(`|---|---|${tokens.map(() => "---").join("|")}|`);
-  lastResults.forEach((r) => {
-    const nativeVal = r.native.error ? "ERR" : formatDisplay(r.native.formatted);
-    const tokenVals = tokens.map((token) => {
-      const tr = r.tokens.find((tk) => tk.address.toLowerCase() === token.address.toLowerCase());
-      if (!tr) return "";
-      return tr.error ? "ERR" : formatDisplay(tr.formatted);
+
+  lastRunResults.forEach(({ chain, results, tokens }) => {
+    const nativeTotal = results.reduce((sum, r) => r.native.error ? sum : sum + parseFloat(r.native.formatted), 0);
+    const tokenTotals = tokens.map((token) => {
+      const total = results.reduce((sum, r) => {
+        const tr = r.tokens.find((tk) => tk.address.toLowerCase() === token.address.toLowerCase());
+        if (!tr || tr.error) return sum;
+        return sum + parseFloat(tr.formatted);
+      }, 0);
+      return { symbol: token.symbol, total };
     });
-    lines.push(`| ${r.address} | ${nativeVal} | ${tokenVals.join(" | ")} |`);
+
+    lines.push(`## ${t("reportChain")}: ${chain.name} (chainId: ${chain.chainNumericId})`);
+    lines.push("");
+    lines.push(`### ${t("reportTotals")}`);
+    lines.push(`- ${chain.nativeSymbol}: ${formatDisplay(nativeTotal.toString())}`);
+    tokenTotals.forEach((tt) => {
+      lines.push(`- ${tt.symbol}: ${formatDisplay(tt.total.toString())}`);
+    });
+    lines.push("");
+    lines.push(`| ${t("address")} | ${chain.nativeSymbol} | ${tokens.map((tk) => tk.symbol).join(" | ")} |`);
+    lines.push(`|---|---|${tokens.map(() => "---").join("|")}|`);
+    results.forEach((r) => {
+      const nativeVal = r.native.error ? "ERR" : formatDisplay(r.native.formatted);
+      const tokenVals = tokens.map((token) => {
+        const tr = r.tokens.find((tk) => tk.address.toLowerCase() === token.address.toLowerCase());
+        if (!tr) return "";
+        return tr.error ? "ERR" : formatDisplay(tr.formatted);
+      });
+      lines.push(`| ${r.address} | ${nativeVal} | ${tokenVals.join(" | ")} |`);
+    });
+    lines.push("");
   });
 
-  downloadFile(lines.join("\n"), `wallet-checker-report-${chain.id}-${Date.now()}.md`, "text/markdown;charset=utf-8;");
+  const filenamePart = lastRunResults.length === 1 ? lastRunResults[0].chain.id : "multichain";
+  downloadFile(lines.join("\n"), `wallet-checker-report-${filenamePart}-${Date.now()}.md`, "text/markdown;charset=utf-8;");
 }
 
 function downloadFile(content, filename, mimeType) {
@@ -642,6 +829,193 @@ function downloadFile(content, filename, mimeType) {
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+// ===== Shareable report card (canvas-rendered PNG) =====
+// طراحی: به‌جای نمایش یک عدد "بزرگ‌ترین موجودی" که بین توکن‌های مختلف قابل مقایسه
+// نیست (مثلاً SOL با XAI)، مجموع استیبل‌کوین‌ها (USDC/USDT) را جمع می‌زنیم که چون
+// هرکدام تقریباً ۱ دلار ارزش دارند، یک رقم دلاری واقعی و قابل دفاع بدون نیاز به
+// API قیمت به دست می‌دهد.
+
+function computeReportCardStats() {
+  const stats = {
+    totalChains: lastRunResults.length,
+    totalAddressChecks: 0,
+    stablecoinTotal: 0,
+    emptyPairs: 0,
+    topFind: null, // { amount, symbol, chainName }
+  };
+
+  const distinctAddresses = new Set();
+
+  lastRunResults.forEach(({ chain, results, tokens }) => {
+    results.forEach((r) => {
+      distinctAddresses.add(r.address);
+
+      const nativeVal = r.native.error ? 0 : parseFloat(r.native.formatted || "0");
+      let rowTotal = nativeVal;
+
+      if (!r.native.error && nativeVal > 0) {
+        if (!stats.topFind || nativeVal > stats.topFind.rawCompareValue) {
+          // مقایسه فقط برای انتخاب یک "نمونه جالب" است، نه ادعای ارزش مالی دقیق
+          stats.topFind = {
+            amount: nativeVal,
+            symbol: chain.nativeSymbol,
+            chainName: chain.name,
+            rawCompareValue: nativeVal,
+          };
+        }
+      }
+
+      tokens.forEach((token) => {
+        const tr = r.tokens.find((tk) => tk.address.toLowerCase() === token.address.toLowerCase());
+        if (!tr || tr.error) return;
+        const val = parseFloat(tr.formatted || "0");
+        rowTotal += val;
+
+        const symbolUpper = token.symbol.toUpperCase();
+        if (symbolUpper === "USDC" || symbolUpper === "USDT") {
+          stats.stablecoinTotal += val;
+        }
+      });
+
+      if (rowTotal === 0) stats.emptyPairs++;
+    });
+  });
+
+  stats.totalAddressChecks = distinctAddresses.size;
+  return stats;
+}
+
+async function renderReportCard() {
+  const stats = computeReportCardStats();
+  const canvas = reportCardCanvas;
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width;
+  const H = canvas.height;
+
+  // اطمینان از لود شدن فونت‌های کاستوم قبل از رسم متن روی canvas
+  try { await document.fonts.ready; } catch (e) { /* در صورت خطا با فونت پیش‌فرض ادامه می‌دهیم */ }
+
+  const COL_BG = "#17140f";
+  const COL_PANEL = "#1e1a13";
+  const COL_BORDER = "#3a3225";
+  const COL_TEXT = "#ece3d1";
+  const COL_TEXT_DIM = "#a89a80";
+  const COL_ACCENT = "#c9a15a";
+
+  // پس‌زمینه
+  ctx.fillStyle = COL_BG;
+  ctx.fillRect(0, 0, W, H);
+
+  // خطوط ظریف افقی، یادآور طرح دفتر حساب خود ابزار
+  ctx.strokeStyle = "rgba(201,161,90,0.05)";
+  ctx.lineWidth = 1;
+  for (let y = 40; y < H; y += 32) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(W, y);
+    ctx.stroke();
+  }
+
+  // برند بالای کارت
+  ctx.fillStyle = COL_ACCENT;
+  ctx.font = "600 22px 'Inter', sans-serif";
+  ctx.textAlign = "left";
+  ctx.fillText("◆", 60, 70);
+  ctx.fillStyle = COL_TEXT;
+  ctx.font = "600 24px 'Source Serif 4', Georgia, serif";
+  ctx.fillText("wallet-checker", 90, 72);
+
+  // هدلاین اصلی: مجموع استیبل‌کوین (اگر پیدا شده باشد)
+  let cursorY = 180;
+  if (stats.stablecoinTotal > 0) {
+    ctx.fillStyle = COL_TEXT_DIM;
+    ctx.font = "500 20px 'Inter', sans-serif";
+    ctx.fillText(`≈ $${stats.stablecoinTotal.toFixed(2)} ${t("cardStablecoinsFound")}`, 60, cursorY);
+    cursorY += 64;
+    ctx.fillStyle = COL_ACCENT;
+    ctx.font = "700 76px 'IBM Plex Mono', monospace";
+    ctx.fillText(`$${stats.stablecoinTotal.toFixed(2)}`, 60, cursorY);
+    cursorY += 70;
+  } else {
+    ctx.fillStyle = COL_TEXT_DIM;
+    ctx.font = "500 22px 'Inter', sans-serif";
+    ctx.fillText(t("cardNoStable"), 60, cursorY);
+    cursorY += 70;
+  }
+
+  // خط جداکننده
+  ctx.strokeStyle = COL_BORDER;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(60, cursorY);
+  ctx.lineTo(W - 60, cursorY);
+  ctx.stroke();
+  cursorY += 50;
+
+  // ردیف آمار کوچک‌تر (سه ستون)
+  const statCols = [
+    { label: t("cardChainsChecked"), value: stats.totalChains.toString() },
+    { label: t("cardAddressesChecked"), value: stats.totalAddressChecks.toString() },
+    { label: t("cardEmptyWallets"), value: stats.emptyPairs.toString() },
+  ];
+  const colWidth = (W - 120) / 3;
+  statCols.forEach((col, i) => {
+    const x = 60 + i * colWidth;
+    ctx.fillStyle = COL_TEXT;
+    ctx.font = "700 40px 'IBM Plex Mono', monospace";
+    ctx.fillText(col.value, x, cursorY);
+    ctx.fillStyle = COL_TEXT_DIM;
+    ctx.font = "500 14px 'Inter', sans-serif";
+    ctx.fillText(col.label.toUpperCase(), x, cursorY + 26);
+  });
+  cursorY += 90;
+
+  // بخش "موجودی قابل‌توجه" (اگر موجودی native غیرصفر پیدا شده باشد)
+  if (stats.topFind) {
+    ctx.strokeStyle = COL_BORDER;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(60, cursorY);
+    ctx.lineTo(W - 60, cursorY);
+    ctx.stroke();
+    cursorY += 40;
+
+    ctx.fillStyle = COL_TEXT_DIM;
+    ctx.font = "500 14px 'Inter', sans-serif";
+    ctx.fillText(t("cardTopFind").toUpperCase(), 60, cursorY);
+    cursorY += 34;
+
+    const amountStr = stats.topFind.amount < 0.000001
+      ? stats.topFind.amount.toExponential(2)
+      : stats.topFind.amount.toLocaleString(undefined, { maximumFractionDigits: 6 });
+    ctx.fillStyle = COL_TEXT;
+    ctx.font = "600 30px 'IBM Plex Mono', monospace";
+    ctx.fillText(`${amountStr} ${stats.topFind.symbol}`, 60, cursorY);
+    ctx.fillStyle = COL_TEXT_DIM;
+    ctx.font = "italic 400 16px 'Source Serif 4', Georgia, serif";
+    ctx.fillText(stats.topFind.chainName, 60, cursorY + 28);
+  }
+
+  // فوتر برند
+  ctx.fillStyle = COL_TEXT_DIM;
+  ctx.font = "400 14px 'Inter', sans-serif";
+  ctx.textAlign = "right";
+  ctx.fillText(t("cardBrand"), W - 60, H - 40);
+  ctx.textAlign = "left";
+}
+
+function downloadReportCardImage() {
+  reportCardCanvas.toBlob((blob) => {
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `wallet-checker-card-${Date.now()}.png`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, "image/png");
 }
 
 // ===== Boot =====

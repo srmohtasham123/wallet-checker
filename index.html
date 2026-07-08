@@ -68,6 +68,7 @@
           <button id="addTokenBtn" class="btn-link" type="button">+ Add custom token</button>
         </div>
       </div>
+      <div id="multiChainNote" class="multi-chain-note" hidden></div>
 
       <!-- فرم افزودن توکن کاستوم - همیشه داخل خود صفحه، بدون پاپ‌آپ -->
       <div id="tokenForm" class="token-form" hidden>
@@ -105,15 +106,14 @@
         <p class="empty-sub" id="emptySub">Enter addresses and press “Check balances”.</p>
       </div>
 
-      <div id="resultsWrap" class="results-wrap" hidden>
-        <table class="results-table" id="resultsTable">
-          <thead>
-            <tr id="resultsHeadRow"></tr>
-          </thead>
-          <tbody id="resultsBody"></tbody>
-        </table>
+      <div id="resultsWrap" class="results-wrap" hidden></div>
 
-        <div class="totals-bar" id="totalsBar"></div>
+      <div id="reportCardSection" class="report-card-section" hidden>
+        <div class="report-card-head">
+          <h2 id="reportCardLabel">Shareable summary</h2>
+          <button id="downloadCardBtn" class="btn-ghost" type="button">Download image</button>
+        </div>
+        <canvas id="reportCardCanvas" width="1200" height="675" class="report-card-canvas"></canvas>
       </div>
     </section>
 
@@ -121,11 +121,15 @@
 
   <footer class="footer">
     <span id="footerNote">Public RPCs are used, each with automatic fallback endpoints — if one is briefly unavailable the tool retries with an alternate before giving up.</span>
+    <div class="trust-note">
+      <span id="trustNote">Everything runs in your browser. No address is ever sent to a server or logged anywhere. Source code:</span>
+      <a href="https://github.com/srmohtasham123/wallet-checker" target="_blank" rel="noopener">GitHub</a>
+    </div>
   </footer>
 
 </div>
 
-<!-- منوی انتخاب شبکه به سبک iOS: باتم‌شیت با جستجو + گروه‌بندی + آیکون -->
+<!-- منوی انتخاب شبکه به سبک iOS: باتم‌شیت با جستجو + گروه‌بندی + چک‌باکس چندتایی -->
 <div id="chainSheetOverlay" class="sheet-overlay" hidden>
   <div class="sheet" id="chainSheet">
     <div class="sheet-handle"></div>
@@ -135,12 +139,17 @@
     </div>
     <input id="chainSearchInput" class="input sheet-search" type="text" placeholder="Search network…" />
     <div id="chainSheetList" class="sheet-list"></div>
+    <div class="sheet-footer">
+      <span id="sheetSelectedCount" class="sheet-selected-count">1 selected</span>
+      <button id="sheetApplyBtn" class="btn-primary btn-small" type="button">Apply</button>
+    </div>
   </div>
 </div>
 
 <script src="i18n.js"></script>
 <script src="chains.js"></script>
 <script src="rpc.js"></script>
+<script src="rpc-solana.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

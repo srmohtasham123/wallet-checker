@@ -6,7 +6,7 @@
 
 const CHAINS = {
   ethereum: {
-    id: "ethereum", name: "Ethereum", group: "popular", chainNumericId: 1,
+    id: "ethereum", chainType: "evm", name: "Ethereum", group: "popular", chainNumericId: 1,
     nativeSymbol: "ETH", icon: "⟠", color: "#627eea",
     rpcUrls: [
       "https://eth.llamarpc.com",
@@ -21,7 +21,7 @@ const CHAINS = {
     ],
   },
   bsc: {
-    id: "bsc", name: "BNB Smart Chain", group: "popular", chainNumericId: 56,
+    id: "bsc", chainType: "evm", name: "BNB Smart Chain", group: "popular", chainNumericId: 56,
     nativeSymbol: "BNB", icon: "◆", color: "#f0b90b",
     rpcUrls: [
       "https://bsc-dataseed.binance.org",
@@ -35,7 +35,7 @@ const CHAINS = {
     ],
   },
   base: {
-    id: "base", name: "Base", group: "popular", chainNumericId: 8453,
+    id: "base", chainType: "evm", name: "Base", group: "popular", chainNumericId: 8453,
     nativeSymbol: "ETH", icon: "◐", color: "#0052ff",
     rpcUrls: [
       "https://mainnet.base.org",
@@ -49,7 +49,7 @@ const CHAINS = {
     ],
   },
   arbitrum: {
-    id: "arbitrum", name: "Arbitrum One", group: "popular", chainNumericId: 42161,
+    id: "arbitrum", chainType: "evm", name: "Arbitrum One", group: "popular", chainNumericId: 42161,
     nativeSymbol: "ETH", icon: "◣", color: "#28a0f0",
     rpcUrls: [
       "https://arb1.arbitrum.io/rpc",
@@ -63,7 +63,7 @@ const CHAINS = {
     ],
   },
   avalanche: {
-    id: "avalanche", name: "Avalanche C-Chain", group: "popular", chainNumericId: 43114,
+    id: "avalanche", chainType: "evm", name: "Avalanche C-Chain", group: "popular", chainNumericId: 43114,
     nativeSymbol: "AVAX", icon: "▲", color: "#e84142",
     rpcUrls: [
       "https://api.avax.network/ext/bc/C/rpc",
@@ -75,7 +75,7 @@ const CHAINS = {
     ],
   },
   polygon: {
-    id: "polygon", name: "Polygon PoS", group: "popular", chainNumericId: 137,
+    id: "polygon", chainType: "evm", name: "Polygon PoS", group: "popular", chainNumericId: 137,
     nativeSymbol: "POL", icon: "⬡", color: "#8247e5",
     rpcUrls: [
       "https://polygon-rpc.com",
@@ -89,7 +89,7 @@ const CHAINS = {
     ],
   },
   optimism: {
-    id: "optimism", name: "OP Mainnet", group: "popular", chainNumericId: 10,
+    id: "optimism", chainType: "evm", name: "OP Mainnet", group: "popular", chainNumericId: 10,
     nativeSymbol: "ETH", icon: "○", color: "#ff0420",
     rpcUrls: [
       "https://mainnet.optimism.io",
@@ -102,7 +102,7 @@ const CHAINS = {
     ],
   },
   gnosis: {
-    id: "gnosis", name: "Gnosis Chain", group: "popular", chainNumericId: 100,
+    id: "gnosis", chainType: "evm", name: "Gnosis Chain", group: "popular", chainNumericId: 100,
     nativeSymbol: "xDAI", icon: "◈", color: "#3e6957",
     rpcUrls: [
       "https://rpc.gnosischain.com",
@@ -112,7 +112,7 @@ const CHAINS = {
     defaultTokens: [],
   },
   linea: {
-    id: "linea", name: "Linea", group: "popular", chainNumericId: 59144,
+    id: "linea", chainType: "evm", name: "Linea", group: "popular", chainNumericId: 59144,
     nativeSymbol: "ETH", icon: "▬", color: "#121212",
     rpcUrls: [
       "https://rpc.linea.build",
@@ -123,7 +123,7 @@ const CHAINS = {
     ],
   },
   zksync: {
-    id: "zksync", name: "zkSync Era", group: "popular", chainNumericId: 324,
+    id: "zksync", chainType: "evm", name: "zkSync Era", group: "popular", chainNumericId: 324,
     nativeSymbol: "ETH", icon: "◆", color: "#8c8dfc",
     rpcUrls: [
       "https://mainnet.era.zksync.io",
@@ -134,7 +134,7 @@ const CHAINS = {
     ],
   },
   scroll: {
-    id: "scroll", name: "Scroll", group: "popular", chainNumericId: 534352,
+    id: "scroll", chainType: "evm", name: "Scroll", group: "popular", chainNumericId: 534352,
     nativeSymbol: "ETH", icon: "◫", color: "#ffeeda",
     rpcUrls: [
       "https://rpc.scroll.io",
@@ -143,7 +143,7 @@ const CHAINS = {
     defaultTokens: [],
   },
   zkevm: {
-    id: "zkevm", name: "Polygon zkEVM", group: "popular", chainNumericId: 1101,
+    id: "zkevm", chainType: "evm", name: "Polygon zkEVM", group: "popular", chainNumericId: 1101,
     nativeSymbol: "ETH", icon: "⬡", color: "#8247e5",
     rpcUrls: [
       "https://zkevm-rpc.com",
@@ -153,52 +153,65 @@ const CHAINS = {
     note: "Network is being deprecated — move funds before shutdown.",
   },
   xai: {
-    id: "xai", name: "Xai Network", group: "popular", chainNumericId: 660279,
+    id: "xai", chainType: "evm", name: "Xai Network", group: "popular", chainNumericId: 660279,
     nativeSymbol: "XAI", icon: "✕", color: "#ff3b3b",
     rpcUrls: [
       "https://xai-chain.net/rpc",
     ],
     defaultTokens: [],
   },
+  solana: {
+    id: "solana", chainType: "solana", name: "Solana", group: "popular", chainNumericId: null,
+    nativeSymbol: "SOL", icon: "◎", color: "#14f195",
+    rpcUrls: [
+      "https://api.mainnet-beta.solana.com",
+      "https://solana.drpc.org",
+    ],
+    // توکن‌های SPL: address اینجا همان mint address توکن است (نه قرارداد ERC-20)
+    defaultTokens: [
+      { symbol: "USDC", address: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", decimals: 6 },
+      { symbol: "USDT", address: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", decimals: 6 },
+    ],
+  },
 
   soneium: {
-    id: "soneium", name: "Soneium", group: "niche", chainNumericId: 1868,
+    id: "soneium", chainType: "evm", name: "Soneium", group: "niche", chainNumericId: 1868,
     nativeSymbol: "ETH", icon: "◔", color: "#000000",
     rpcUrls: ["https://rpc.soneium.org"],
     defaultTokens: [],
   },
   taiko: {
-    id: "taiko", name: "Taiko", group: "niche", chainNumericId: 167000,
+    id: "taiko", chainType: "evm", name: "Taiko", group: "niche", chainNumericId: 167000,
     nativeSymbol: "ETH", icon: "▧", color: "#e81899",
     rpcUrls: ["https://rpc.mainnet.taiko.xyz"],
     defaultTokens: [],
   },
   rarichain: {
-    id: "rarichain", name: "RARI Chain", group: "niche", chainNumericId: 1380012617,
+    id: "rarichain", chainType: "evm", name: "RARI Chain", group: "niche", chainNumericId: 1380012617,
     nativeSymbol: "ETH", icon: "◇", color: "#00d4aa",
     rpcUrls: ["https://mainnet.rpc.rarichain.org/http"],
     defaultTokens: [],
   },
   redstone: {
-    id: "redstone", name: "Redstone", group: "niche", chainNumericId: 690,
+    id: "redstone", chainType: "evm", name: "Redstone", group: "niche", chainNumericId: 690,
     nativeSymbol: "ETH", icon: "▮", color: "#e63946",
     rpcUrls: ["https://rpc.redstonechain.com"],
     defaultTokens: [],
   },
   superposition: {
-    id: "superposition", name: "Superposition", group: "niche", chainNumericId: 55244,
+    id: "superposition", chainType: "evm", name: "Superposition", group: "niche", chainNumericId: 55244,
     nativeSymbol: "ETH", icon: "∞", color: "#7b2ff7",
     rpcUrls: ["https://rpc.superposition.so"],
     defaultTokens: [],
   },
   mantle: {
-    id: "mantle", name: "Mantle", group: "niche", chainNumericId: 5000,
+    id: "mantle", chainType: "evm", name: "Mantle", group: "niche", chainNumericId: 5000,
     nativeSymbol: "MNT", icon: "▨", color: "#000000",
     rpcUrls: ["https://rpc.mantle.xyz", "https://mantle-rpc.publicnode.com"],
     defaultTokens: [],
   },
   cronos: {
-    id: "cronos", name: "Cronos", group: "niche", chainNumericId: 25,
+    id: "cronos", chainType: "evm", name: "Cronos", group: "niche", chainNumericId: 25,
     nativeSymbol: "CRO", icon: "◉", color: "#002d74",
     rpcUrls: ["https://evm.cronos.org", "https://cronos-evm-rpc.publicnode.com"],
     defaultTokens: [
@@ -206,7 +219,7 @@ const CHAINS = {
     ],
   },
   celo: {
-    id: "celo", name: "Celo", group: "niche", chainNumericId: 42220,
+    id: "celo", chainType: "evm", name: "Celo", group: "niche", chainNumericId: 42220,
     nativeSymbol: "CELO", icon: "◕", color: "#fcff52",
     rpcUrls: ["https://forno.celo.org"],
     defaultTokens: [
@@ -214,7 +227,7 @@ const CHAINS = {
     ],
   },
   sonic: {
-    id: "sonic", name: "Sonic", group: "niche", chainNumericId: 146,
+    id: "sonic", chainType: "evm", name: "Sonic", group: "niche", chainNumericId: 146,
     nativeSymbol: "S", icon: "»", color: "#fe9a2d",
     rpcUrls: ["https://rpc.soniclabs.com"],
     defaultTokens: [
@@ -223,7 +236,7 @@ const CHAINS = {
     note: "Official successor to Fantom Opera (now deprecated).",
   },
   moonbeam: {
-    id: "moonbeam", name: "Moonbeam", group: "niche", chainNumericId: 1284,
+    id: "moonbeam", chainType: "evm", name: "Moonbeam", group: "niche", chainNumericId: 1284,
     nativeSymbol: "GLMR", icon: "☾", color: "#53cbc9",
     rpcUrls: ["https://rpc.api.moonbeam.network", "https://moonbeam-rpc.publicnode.com"],
     defaultTokens: [],

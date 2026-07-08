@@ -7,21 +7,23 @@
 ## ویژگی‌ها
 
 - بررسی batch چند آدرس هم‌زمان (هر خط یک آدرس)
-- ۲۳ شبکه از پیش تنظیم‌شده، گروه‌بندی‌شده به پرطرفدار/کم‌فعال (قابل گسترش در `chains.js`)
+- **۲۴ شبکه** از پیش تنظیم‌شده (۲۳ شبکه EVM + سولانا)، گروه‌بندی‌شده به پرطرفدار/کم‌فعال
+- **انتخاب چندشبکه‌ای هم‌زمان** — چک‌باکس روی هر شبکه یا کل یک گروه، همه با هم چک می‌شوند
+- **پشتیبانی سولانا** — موتور RPC جدا (`rpc-solana.js`) که آدرس‌های base58 و توکن‌های SPL را می‌فهمد؛ اگر آدرس‌های EVM و سولانا با هم پیست شوند، هرکدام خودکار فقط روی شبکه‌ی متناسب با فرمتشان چک می‌شوند
 - منوی انتخاب شبکه به سبک iOS (باتم‌شیت با جستجو، آیکون و رنگ هر شبکه)
-- هر شبکه ۲ تا ۴ RPC fallback مستقل دارد؛ اگر یکی پاسخ ندهد یا timeout بزند (۸ ثانیه)، خودکار سراغ بعدی می‌رود
-- افزودن توکن ERC-20 کاستوم از داخل رابط کاربری (ذخیره در `localStorage`)، با دکمه Select All / پاک‌کردن گروهی
-- سه زبان: انگلیسی (پیش‌فرض)، فارسی، چینی — قابل تعویض از نوار بالا
-- جمع کل هر توکن/native در پایین جدول
-- خروجی CSV و خروجی گزارش خلاصه (Markdown) شامل شبکه، تعداد آدرس، توکن‌های استفاده‌شده و جمع کل
+- هر شبکه ۱ تا ۴ RPC fallback مستقل دارد؛ اگر یکی پاسخ ندهد یا timeout بزند (۸ ثانیه)، خودکار سراغ بعدی می‌رود
+- افزودن توکن ERC-20/SPL کاستوم از داخل رابط کاربری، با دکمه Select All / پاک‌کردن گروهی
+- سه زبان: انگلیسی (پیش‌فرض)، فارسی، چینی
+- جمع کل هر توکن/native در پایین جدول هر شبکه
+- خروجی CSV، خروجی گزارش خلاصه (Markdown)، و **کارنامه تصویری قابل‌اشتراک‌گذاری** (PNG، برای پست کردن در شبکه‌های اجتماعی — شامل مجموع استیبل‌کوین‌های پیداشده، تعداد شبکه/آدرس چک‌شده، و یک موجودی قابل‌توجه)
 - طراحی بهینه برای موبایل
 - بدون build، بدون dependency — فقط HTML/CSS/JS خالص
 
-## شبکه‌های پشتیبانی‌شده (۲۳ شبکه)
+## شبکه‌های پشتیبانی‌شده (۲۴ شبکه)
 
-همه Chain ID و RPC اصلی از chainlist.org و مستندات رسمی هر شبکه، و RPCهای fallback از ارائه‌دهندگان عمومی شناخته‌شده (publicnode.com, llamarpc.com, ankr.com) گرفته شده‌اند. آدرس‌های USDC از [مستندات رسمی Circle](https://developers.circle.com/stablecoins/usdc-contract-addresses).
+همه Chain ID و RPC اصلی از chainlist.org، مستندات رسمی Solana، و مستندات هر شبکه، و RPCهای fallback از ارائه‌دهندگان عمومی شناخته‌شده (publicnode.com, llamarpc.com, ankr.com, drpc.org) گرفته شده‌اند. آدرس‌های USDC از [مستندات رسمی Circle](https://developers.circle.com/stablecoins/usdc-contract-addresses).
 
-**پرطرفدار:** Ethereum · BNB Smart Chain · Base · Arbitrum One · Avalanche C-Chain · Polygon PoS · OP Mainnet · Gnosis Chain · Linea · zkSync Era · Scroll · Polygon zkEVM (در حال منسوخ‌شدن) · Xai Network
+**پرطرفدار:** Ethereum · BNB Smart Chain · Base · Arbitrum One · Avalanche C-Chain · Polygon PoS · OP Mainnet · Gnosis Chain · Linea · zkSync Era · Scroll · Polygon zkEVM (در حال منسوخ‌شدن) · Xai Network · **Solana**
 
 **کم‌فعال/تخصصی:** Soneium · Taiko · RARI Chain · Redstone · Superposition · Mantle · Cronos · Celo · Sonic (جانشین Fantom) · Moonbeam
 
