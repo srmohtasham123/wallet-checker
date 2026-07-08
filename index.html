@@ -45,6 +45,18 @@
       </button>
       <div id="chainNote" class="chain-note" hidden></div>
 
+      <div class="field-label-row">
+        <span></span>
+        <button id="customRpcBtn" class="btn-link btn-link-muted" type="button">Custom RPC</button>
+      </div>
+      <div id="customRpcForm" class="token-form" hidden>
+        <input id="customRpcInput" class="input" type="text" placeholder="https://your-rpc-url.com" />
+        <div class="token-form-row">
+          <button id="customRpcSave" class="btn-primary btn-small" type="button">Save</button>
+          <button id="customRpcClear" class="btn-ghost btn-small" type="button">Clear</button>
+        </div>
+      </div>
+
       <label class="field-label" id="addressesLabel">
         Addresses <span class="hint" id="addressesHint">(one per line)</span>
       </label>

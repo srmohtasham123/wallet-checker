@@ -127,11 +127,20 @@ const CHAINS = {
     nativeSymbol: "ETH", icon: "◆", color: "#8c8dfc",
     rpcUrls: [
       "https://mainnet.era.zksync.io",
-      "https://zksync-era-rpc.publicnode.com",
+      "https://zksync.drpc.org",
     ],
     defaultTokens: [
       { symbol: "USDC", address: "0x1d17CBcF0D6D143135aE902365D2E5e2A16538D4", decimals: 6 },
     ],
+  },
+  opbnb: {
+    id: "opbnb", chainType: "evm", name: "opBNB", group: "popular", chainNumericId: 204,
+    nativeSymbol: "BNB", icon: "◆", color: "#f0b90b",
+    rpcUrls: [
+      "https://opbnb-mainnet-rpc.bnbchain.org",
+      "https://opbnb.drpc.org",
+    ],
+    defaultTokens: [],
   },
   scroll: {
     id: "scroll", chainType: "evm", name: "Scroll", group: "popular", chainNumericId: 534352,
@@ -279,4 +288,41 @@ function removeCustomToken(chainId, address) {
     (t) => t.address.toLowerCase() !== address.toLowerCase()
   );
   saveCustomTokens(all);
+}
+
+// ===== Custom RPC override =====
+// اگر RPCهای پیش‌فرض یک شبکه ناپایدار بودند (مثلاً Taiko/Redstone که گاهی همه
+// endpointهای عمومی‌شان هم‌زمان مشکل دارند)، کاربر می‌تواند یک RPC اختصاصی
+// جایگزین وارد کند که همیشه قبل از بقیه امتحان می‌شود.
+
+const RPC_OVERRIDE_KEY = "wallet_checker_rpc_overrides_v1";
+
+function loadRpcOverrides() {
+  try {
+    const raw = localStorage.getItem(RPC_OVERRIDE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function saveRpcOverride(chainId, url) {
+  const all = loadRpcOverrides();
+  all[chainId] = url;
+  localStorage.setItem(RPC_OVERRIDE_KEY, JSON.stringify(all));
+}
+
+function clearRpcOverride(chainId) {
+  const all = loadRpcOverrides();
+  delete all[chainId];
+  localStorage.setItem(RPC_OVERRIDE_KEY, JSON.stringify(all));
+}
+
+function getEffectiveRpcUrls(chainId) {
+  const overrides = loadRpcOverrides();
+  const base = CHAINS[chainId]?.rpcUrls || [];
+  if (overrides[chainId]) {
+    return [overrides[chainId], ...base];
+  }
+  return base;
 }

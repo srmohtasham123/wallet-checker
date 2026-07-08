@@ -49,6 +49,11 @@ const chainCount = document.getElementById("chainCount");
 const reportCardSection = document.getElementById("reportCardSection");
 const reportCardCanvas = document.getElementById("reportCardCanvas");
 const downloadCardBtn = document.getElementById("downloadCardBtn");
+const customRpcBtn = document.getElementById("customRpcBtn");
+const customRpcForm = document.getElementById("customRpcForm");
+const customRpcInput = document.getElementById("customRpcInput");
+const customRpcSave = document.getElementById("customRpcSave");
+const customRpcClear = document.getElementById("customRpcClear");
 
 // ===== i18n application =====
 
@@ -77,6 +82,10 @@ function applyTranslations() {
   reportBtn.textContent = t("exportReport");
   document.getElementById("reportCardLabel").textContent = t("reportCardLabel");
   downloadCardBtn.textContent = t("downloadImage");
+  customRpcBtn.textContent = customRpcForm.hidden ? t("customRpc") : t("closeForm");
+  customRpcInput.placeholder = t("customRpcPlaceholder");
+  customRpcSave.textContent = t("save");
+  customRpcClear.textContent = t("clear");
   document.getElementById("emptyTitle").textContent = t("emptyTitle");
   document.getElementById("emptySub").textContent = t("emptySub");
   document.getElementById("footerNote").textContent = t("footerNote");
@@ -139,6 +148,9 @@ function init() {
   exportBtn.addEventListener("click", exportCsv);
   reportBtn.addEventListener("click", exportSummaryReport);
   downloadCardBtn.addEventListener("click", downloadReportCardImage);
+  customRpcBtn.addEventListener("click", toggleCustomRpcForm);
+  customRpcSave.addEventListener("click", saveCustomRpcForCurrentChain);
+  customRpcClear.addEventListener("click", clearCustomRpcForCurrentChain);
 }
 
 // ===== Chain picker (iOS-style bottom sheet, multi-select) =====
@@ -358,12 +370,15 @@ function renderTokenPanel() {
   addTokenBtn.hidden = !isSingle;
   clearCustomTokensBtn.hidden = !isSingle || !hasCustomTokensForCurrentChain();
   multiChainNote.hidden = isSingle;
+  customRpcBtn.hidden = !isSingle;
 
   if (isSingle) {
     currentChainId = selectedChainIds[0];
     renderTokenList();
+    closeCustomRpcForm();
   } else {
     closeTokenForm();
+    closeCustomRpcForm();
   }
 }
 
@@ -497,6 +512,40 @@ function clearAllCustomTokensForCurrentChain() {
   renderTokenList();
 }
 
+// ===== Custom RPC override (inline form, همان الگوی فرم توکن کاستوم) =====
+
+function toggleCustomRpcForm() {
+  if (customRpcForm.hidden) openCustomRpcForm();
+  else closeCustomRpcForm();
+}
+
+function openCustomRpcForm() {
+  customRpcForm.hidden = false;
+  const overrides = loadRpcOverrides();
+  customRpcInput.value = overrides[currentChainId] || "";
+  customRpcBtn.textContent = t("closeForm");
+  customRpcInput.focus();
+}
+
+function closeCustomRpcForm() {
+  customRpcForm.hidden = true;
+  customRpcBtn.textContent = t("customRpc");
+}
+
+function saveCustomRpcForCurrentChain() {
+  const url = customRpcInput.value.trim();
+  if (!url) return;
+  saveRpcOverride(currentChainId, url);
+  setStatus(t("customRpcSaved"), "");
+  closeCustomRpcForm();
+}
+
+function clearCustomRpcForCurrentChain() {
+  clearRpcOverride(currentChainId);
+  customRpcInput.value = "";
+  setStatus(t("customRpcCleared"), "");
+}
+
 // ===== Run check (multi-chain aware) =====
 
 function resetResults() {
@@ -544,6 +593,8 @@ async function runCheck() {
     const addresses = perChainAddresses[chainId];
     const tokens = isSingle ? getCheckedTokens() : (chain.defaultTokens || []);
     const checkFn = chain.chainType === "solana" ? checkSolanaAddressOnChain : checkAddressOnChain;
+    // اگر کاربر RPC اختصاصی برای این شبکه ذخیره کرده باشد، اول از همه امتحان می‌شود
+    const effectiveChain = { ...chain, rpcUrls: getEffectiveRpcUrls(chainId) };
 
     if (addresses.length === 0) {
       // هیچ آدرسی با فرمت این شبکه مطابقت نداشت (مثلاً فقط آدرس EVM دادی ولی سولانا هم انتخاب کردی)
@@ -564,7 +615,7 @@ async function runCheck() {
     const results = [];
     await Promise.all(
       addresses.map(async (addr, i) => {
-        const result = await checkFn(chain, addr, tokens);
+        const result = await checkFn(effectiveChain, addr, tokens);
         results[i] = result;
         fillRow(section.rowEls[i], result, tokens);
         totalDone++;

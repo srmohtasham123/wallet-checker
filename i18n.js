@@ -68,6 +68,12 @@ const TRANSLATIONS = {
     cardTopFind: "Notable balance",
     cardNoStable: "No USDC/USDT found this run",
     cardBrand: "wallet-checker — free, open-source, no signup",
+    customRpc: "Custom RPC",
+    customRpcPlaceholder: "https://your-rpc-url.com",
+    save: "Save",
+    clear: "Clear",
+    customRpcSaved: "Custom RPC saved for this chain — it will be tried first.",
+    customRpcCleared: "Custom RPC removed.",
   },
   fa: {
     dir: "rtl",
@@ -132,6 +138,12 @@ const TRANSLATIONS = {
     cardTopFind: "موجودی قابل‌توجه",
     cardNoStable: "این بار USDC/USDT پیدا نشد",
     cardBrand: "wallet-checker — رایگان، اوپن‌سورس، بدون ثبت‌نام",
+    customRpc: "RPC اختصاصی",
+    customRpcPlaceholder: "https://your-rpc-url.com",
+    save: "ذخیره",
+    clear: "پاک‌کردن",
+    customRpcSaved: "RPC اختصاصی این شبکه ذخیره شد — اول از همه امتحان می‌شود.",
+    customRpcCleared: "RPC اختصاصی حذف شد.",
   },
   zh: {
     dir: "ltr",
@@ -196,6 +208,12 @@ const TRANSLATIONS = {
     cardTopFind: "值得注意的余额",
     cardNoStable: "本次未发现 USDC/USDT",
     cardBrand: "wallet-checker — 免费、开源、无需注册",
+    customRpc: "自定义 RPC",
+    customRpcPlaceholder: "https://your-rpc-url.com",
+    save: "保存",
+    clear: "清除",
+    customRpcSaved: "已保存此链的自定义 RPC — 将优先尝试。",
+    customRpcCleared: "已移除自定义 RPC。",
   },
 };
 
