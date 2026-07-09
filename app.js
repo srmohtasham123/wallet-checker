@@ -578,6 +578,7 @@ async function runCheck() {
   lastRunResults = [];
 
   const isSingle = selectedChainIds.length === 1;
+  const isMulti = !isSingle;
 
   // برای هر شبکه، فقط آدرس‌هایی که فرمتشان با نوع آن شبکه (EVM یا سولانا) مطابقت دارد چک می‌شوند
   const perChainAddresses = {};
@@ -587,6 +588,12 @@ async function runCheck() {
 
   let totalDone = 0;
   const totalWork = selectedChainIds.reduce((sum, id) => sum + perChainAddresses[id].length, 0);
+
+  // جایگاه جدول خلاصه بالای صفحه (در حالت چندشبکه‌ای) - بعد از اتمام همه چک‌ها پر می‌شود
+  const summaryPlaceholder = document.createElement("div");
+  if (isMulti) resultsWrap.appendChild(summaryPlaceholder);
+
+  const chainFindings = []; // برای ساخت جدول خلاصه: { chain, nonZeroEntries: [{symbol, total}] }
 
   for (const chainId of selectedChainIds) {
     const chain = CHAINS[chainId];
@@ -603,6 +610,8 @@ async function runCheck() {
       emptyMsg.className = "chain-section-empty";
       emptyMsg.textContent = "—";
       section.container.appendChild(emptyMsg);
+      if (section.statusBadge) section.statusBadge.textContent = "—";
+      if (section.container.tagName === "DETAILS") section.container.open = false;
       resultsWrap.appendChild(section.container);
       continue;
     }
@@ -625,6 +634,21 @@ async function runCheck() {
 
     renderChainTotals(section.totalsBar, results, tokens, chain);
     lastRunResults.push({ chainId, chain, results, tokens });
+
+    // محاسبه اینکه آیا این شبکه اصلاً موجودی غیرصفر داشته، برای collapse خودکار
+    const nonZeroEntries = computeNonZeroTotals(results, tokens, chain);
+    const hasBalance = nonZeroEntries.length > 0;
+    if (section.container.tagName === "DETAILS") section.container.open = hasBalance;
+    if (section.statusBadge) {
+      section.statusBadge.textContent = hasBalance ? "●" : "—";
+      section.statusBadge.classList.toggle("has-balance", hasBalance);
+    }
+    if (isMulti) chainFindings.push({ chain, nonZeroEntries });
+  }
+
+  if (isMulti) {
+    const summaryTable = buildGrandSummary(chainFindings);
+    summaryPlaceholder.replaceWith(summaryTable);
   }
 
   const chainNames = selectedChainIds.map((id) => CHAINS[id].name).join(", ");
@@ -639,13 +663,110 @@ async function runCheck() {
   }
 }
 
-function buildChainSection(chain, tokens, addresses) {
-  const container = document.createElement("div");
-  container.className = "chain-section";
+// محاسبه لیست موجودی‌های غیرصفر یک شبکه (جمع همه آدرس‌ها)، برای جدول خلاصه و برای
+// تصمیم collapse خودکار
+function computeNonZeroTotals(results, tokens, chain) {
+  const entries = [];
+  const nativeTotal = results.reduce((sum, r) => r.native.error ? sum : sum + parseFloat(r.native.formatted || "0"), 0);
+  if (nativeTotal > 0) entries.push({ symbol: chain.nativeSymbol, total: nativeTotal });
 
-  if (selectedChainIds.length > 1) {
-    const heading = document.createElement("div");
-    heading.className = "chain-section-heading";
+  tokens.forEach((token) => {
+    const total = results.reduce((sum, r) => {
+      const tr = r.tokens.find((tk) => tk.address.toLowerCase() === token.address.toLowerCase());
+      if (!tr || tr.error) return sum;
+      return sum + parseFloat(tr.formatted || "0");
+    }, 0);
+    if (total > 0) entries.push({ symbol: token.symbol, total });
+  });
+
+  return entries;
+}
+
+// جدول خلاصه بالای صفحه: فقط شبکه‌هایی که موجودی دارند به‌صورت کامل نشان داده می‌شوند؛
+// شبکه‌های کاملاً صفر به‌صورت یک خط جمع‌وجور در پایین لیست می‌شوند تا کاربر مجبور
+// نباشد بین ده‌ها بخش خالی برای پیداکردن پول واقعی اسکرول کند.
+function buildGrandSummary(chainFindings) {
+  const wrap = document.createElement("div");
+  wrap.className = "grand-summary";
+
+  const withBalance = chainFindings.filter((f) => f.nonZeroEntries.length > 0);
+  const withoutBalance = chainFindings.filter((f) => f.nonZeroEntries.length === 0);
+
+  const title = document.createElement("div");
+  title.className = "grand-summary-title";
+  title.textContent = t("grandSummaryTitle");
+  wrap.appendChild(title);
+
+  if (withBalance.length === 0) {
+    const none = document.createElement("div");
+    none.className = "grand-summary-empty";
+    none.textContent = t("grandSummaryNone");
+    wrap.appendChild(none);
+  } else {
+    const table = document.createElement("table");
+    table.className = "results-table grand-summary-table";
+    const thead = document.createElement("thead");
+    const headRow = document.createElement("tr");
+    [t("chainSection"), t("cardTopFind")].forEach((label) => {
+      const th = document.createElement("th");
+      th.textContent = label;
+      headRow.appendChild(th);
+    });
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+
+    const tbody = document.createElement("tbody");
+    withBalance
+      .sort((a, b) => b.nonZeroEntries.length - a.nonZeroEntries.length)
+      .forEach(({ chain, nonZeroEntries }) => {
+        const tr = document.createElement("tr");
+        const chainTd = document.createElement("td");
+        chainTd.className = "grand-summary-chain-cell";
+        const icon = document.createElement("span");
+        icon.className = "chain-section-icon";
+        icon.textContent = chain.icon || "●";
+        icon.style.background = hexToSoft(chain.color);
+        icon.style.color = chain.color;
+        chainTd.appendChild(icon);
+        chainTd.appendChild(document.createTextNode(chain.name));
+        tr.appendChild(chainTd);
+
+        const valuesTd = document.createElement("td");
+        valuesTd.className = "balance-cell";
+        valuesTd.textContent = nonZeroEntries
+          .map((e) => `${formatDisplay(e.total.toString())} ${e.symbol}`)
+          .join(" · ");
+        tr.appendChild(valuesTd);
+
+        tbody.appendChild(tr);
+      });
+    table.appendChild(tbody);
+    wrap.appendChild(table);
+  }
+
+  if (withoutBalance.length > 0) {
+    const zeroLine = document.createElement("div");
+    zeroLine.className = "grand-summary-zero-line";
+    zeroLine.textContent = `${t("grandSummaryZero")}: ${withoutBalance.map((f) => f.chain.name).join(", ")}`;
+    wrap.appendChild(zeroLine);
+  }
+
+  return wrap;
+}
+
+function buildChainSection(chain, tokens, addresses) {
+  const isMulti = selectedChainIds.length > 1;
+  let container, contentHost, statusBadge = null;
+
+  if (isMulti) {
+    // در حالت چندشبکه‌ای، از details/summary بومی مرورگر استفاده می‌کنیم تا
+    // بدون نیاز به جاوااسکریپت اضافه، هر شبکه قابل جمع‌شدن/بازشدن باشد.
+    container = document.createElement("details");
+    container.className = "chain-section chain-section-collapsible";
+    container.open = true; // تا پایان بارگذاری، باز نگه داشته می‌شود
+
+    const summary = document.createElement("summary");
+    summary.className = "chain-section-heading";
     const icon = document.createElement("span");
     icon.className = "chain-section-icon";
     icon.textContent = chain.icon || "●";
@@ -653,13 +774,25 @@ function buildChainSection(chain, tokens, addresses) {
     icon.style.color = chain.color;
     const name = document.createElement("span");
     name.textContent = chain.name;
-    heading.appendChild(icon);
-    heading.appendChild(name);
-    container.appendChild(heading);
+    statusBadge = document.createElement("span");
+    statusBadge.className = "chain-section-status";
+    statusBadge.textContent = "…";
+    summary.appendChild(icon);
+    summary.appendChild(name);
+    summary.appendChild(statusBadge);
+    container.appendChild(summary);
+
+    contentHost = document.createElement("div");
+    contentHost.className = "chain-section-body";
+    container.appendChild(contentHost);
+  } else {
+    container = document.createElement("div");
+    container.className = "chain-section";
+    contentHost = container;
   }
 
   if (addresses.length === 0) {
-    return { container, rowEls: [], totalsBar: document.createElement("div") };
+    return { container, rowEls: [], totalsBar: document.createElement("div"), statusBadge };
   }
 
   const table = document.createElement("table");
@@ -686,10 +819,10 @@ function buildChainSection(chain, tokens, addresses) {
   const totalsBar = document.createElement("div");
   totalsBar.className = "totals-bar";
 
-  container.appendChild(table);
-  container.appendChild(totalsBar);
+  contentHost.appendChild(table);
+  contentHost.appendChild(totalsBar);
 
-  return { container, rowEls, totalsBar };
+  return { container, rowEls, totalsBar, statusBadge };
 }
 
 function buildLoadingRow(address, tokens) {
@@ -891,49 +1024,58 @@ function downloadFile(content, filename, mimeType) {
 function computeReportCardStats() {
   const stats = {
     totalChains: lastRunResults.length,
+    chainsWithBalance: 0,
     totalAddressChecks: 0,
     stablecoinTotal: 0,
     emptyPairs: 0,
-    topFind: null, // { amount, symbol, chainName }
+    topFindings: [], // آرایه‌ای از { amount, symbol, chainName } - حداکثر ۳ مورد
   };
 
   const distinctAddresses = new Set();
+  const allFindings = []; // همه (شبکه، نماد، جمع) های غیرصفر برای انتخاب چندتای برتر
 
   lastRunResults.forEach(({ chain, results, tokens }) => {
-    results.forEach((r) => {
+    let chainHasBalance = false;
+
+    const nativeTotal = results.reduce((sum, r) => {
       distinctAddresses.add(r.address);
+      return r.native.error ? sum : sum + parseFloat(r.native.formatted || "0");
+    }, 0);
+    if (nativeTotal > 0) {
+      allFindings.push({ amount: nativeTotal, symbol: chain.nativeSymbol, chainName: chain.name });
+      chainHasBalance = true;
+    }
 
-      const nativeVal = r.native.error ? 0 : parseFloat(r.native.formatted || "0");
-      let rowTotal = nativeVal;
-
-      if (!r.native.error && nativeVal > 0) {
-        if (!stats.topFind || nativeVal > stats.topFind.rawCompareValue) {
-          // مقایسه فقط برای انتخاب یک "نمونه جالب" است، نه ادعای ارزش مالی دقیق
-          stats.topFind = {
-            amount: nativeVal,
-            symbol: chain.nativeSymbol,
-            chainName: chain.name,
-            rawCompareValue: nativeVal,
-          };
-        }
-      }
-
-      tokens.forEach((token) => {
+    tokens.forEach((token) => {
+      const tokenTotal = results.reduce((sum, r) => {
         const tr = r.tokens.find((tk) => tk.address.toLowerCase() === token.address.toLowerCase());
-        if (!tr || tr.error) return;
+        if (!tr || tr.error) return sum;
         const val = parseFloat(tr.formatted || "0");
-        rowTotal += val;
-
         const symbolUpper = token.symbol.toUpperCase();
-        if (symbolUpper === "USDC" || symbolUpper === "USDT") {
-          stats.stablecoinTotal += val;
-        }
-      });
+        if (symbolUpper === "USDC" || symbolUpper === "USDT") stats.stablecoinTotal += val;
+        return sum + val;
+      }, 0);
+      if (tokenTotal > 0) {
+        allFindings.push({ amount: tokenTotal, symbol: token.symbol, chainName: chain.name });
+        chainHasBalance = true;
+      }
+    });
 
-      if (rowTotal === 0) stats.emptyPairs++;
+    if (chainHasBalance) stats.chainsWithBalance++;
+
+    // شمارش جفت‌های آدرس-شبکه کاملاً صفر (برای stat "empty pairs")
+    results.forEach((r) => {
+      const nativeVal = r.native.error ? 0 : parseFloat(r.native.formatted || "0");
+      const tokensSum = tokens.reduce((s, token) => {
+        const tr = r.tokens.find((tk) => tk.address.toLowerCase() === token.address.toLowerCase());
+        return tr && !tr.error ? s + parseFloat(tr.formatted || "0") : s;
+      }, 0);
+      if (nativeVal + tokensSum === 0) stats.emptyPairs++;
     });
   });
 
+  // انتخاب ۳ مورد برتر (فقط برای برجسته‌کردن چند یافته جالب، نه ادعای مقایسه دقیق مالی بین توکن‌های مختلف)
+  stats.topFindings = allFindings.sort((a, b) => b.amount - a.amount).slice(0, 3);
   stats.totalAddressChecks = distinctAddresses.size;
   return stats;
 }
@@ -1007,7 +1149,7 @@ async function renderReportCard() {
 
   // ردیف آمار کوچک‌تر (سه ستون)
   const statCols = [
-    { label: t("cardChainsChecked"), value: stats.totalChains.toString() },
+    { label: t("cardChainsWithBalance"), value: `${stats.chainsWithBalance}/${stats.totalChains}` },
     { label: t("cardAddressesChecked"), value: stats.totalAddressChecks.toString() },
     { label: t("cardEmptyWallets"), value: stats.emptyPairs.toString() },
   ];
@@ -1023,8 +1165,8 @@ async function renderReportCard() {
   });
   cursorY += 90;
 
-  // بخش "موجودی قابل‌توجه" (اگر موجودی native غیرصفر پیدا شده باشد)
-  if (stats.topFind) {
+  // بخش "موجودی‌های قابل‌توجه" - تا ۳ مورد برتر (نه فقط یکی)
+  if (stats.topFindings.length > 0) {
     ctx.strokeStyle = COL_BORDER;
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -1036,17 +1178,20 @@ async function renderReportCard() {
     ctx.fillStyle = COL_TEXT_DIM;
     ctx.font = "500 14px 'Inter', sans-serif";
     ctx.fillText(t("cardTopFind").toUpperCase(), 60, cursorY);
-    cursorY += 34;
+    cursorY += 38;
 
-    const amountStr = stats.topFind.amount < 0.000001
-      ? stats.topFind.amount.toExponential(2)
-      : stats.topFind.amount.toLocaleString(undefined, { maximumFractionDigits: 6 });
-    ctx.fillStyle = COL_TEXT;
-    ctx.font = "600 30px 'IBM Plex Mono', monospace";
-    ctx.fillText(`${amountStr} ${stats.topFind.symbol}`, 60, cursorY);
-    ctx.fillStyle = COL_TEXT_DIM;
-    ctx.font = "italic 400 16px 'Source Serif 4', Georgia, serif";
-    ctx.fillText(stats.topFind.chainName, 60, cursorY + 28);
+    stats.topFindings.forEach((finding) => {
+      const amountStr = finding.amount < 0.000001
+        ? finding.amount.toExponential(2)
+        : finding.amount.toLocaleString(undefined, { maximumFractionDigits: 6 });
+      ctx.fillStyle = COL_TEXT;
+      ctx.font = "600 26px 'IBM Plex Mono', monospace";
+      ctx.fillText(`${amountStr} ${finding.symbol}`, 60, cursorY);
+      ctx.fillStyle = COL_TEXT_DIM;
+      ctx.font = "italic 400 15px 'Source Serif 4', Georgia, serif";
+      ctx.fillText(finding.chainName, 460, cursorY);
+      cursorY += 42;
+    });
   }
 
   // فوتر برند

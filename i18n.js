@@ -65,6 +65,7 @@ const TRANSLATIONS = {
     cardChainsChecked: "chains checked",
     cardAddressesChecked: "addresses checked",
     cardEmptyWallets: "wallet-chain pairs empty",
+    cardChainsWithBalance: "chains with balance",
     cardTopFind: "Notable balance",
     cardNoStable: "No USDC/USDT found this run",
     cardBrand: "wallet-checker — free, open-source, no signup",
@@ -74,6 +75,9 @@ const TRANSLATIONS = {
     clear: "Clear",
     customRpcSaved: "Custom RPC saved for this chain — it will be tried first.",
     customRpcCleared: "Custom RPC removed.",
+    grandSummaryTitle: "Where you actually have balance",
+    grandSummaryNone: "No balance found on any selected chain.",
+    grandSummaryZero: "Zero balance on",
   },
   fa: {
     dir: "rtl",
@@ -135,6 +139,7 @@ const TRANSLATIONS = {
     cardChainsChecked: "شبکه چک شد",
     cardAddressesChecked: "آدرس چک شد",
     cardEmptyWallets: "جفت کیف‌پول-شبکه خالی",
+    cardChainsWithBalance: "شبکه با موجودی",
     cardTopFind: "موجودی قابل‌توجه",
     cardNoStable: "این بار USDC/USDT پیدا نشد",
     cardBrand: "wallet-checker — رایگان، اوپن‌سورس، بدون ثبت‌نام",
@@ -144,6 +149,9 @@ const TRANSLATIONS = {
     clear: "پاک‌کردن",
     customRpcSaved: "RPC اختصاصی این شبکه ذخیره شد — اول از همه امتحان می‌شود.",
     customRpcCleared: "RPC اختصاصی حذف شد.",
+    grandSummaryTitle: "کجا واقعاً موجودی داری",
+    grandSummaryNone: "هیچ موجودی‌ای رو هیچ‌کدوم از شبکه‌های انتخابی پیدا نشد.",
+    grandSummaryZero: "موجودی صفر روی",
   },
   zh: {
     dir: "ltr",
@@ -205,6 +213,7 @@ const TRANSLATIONS = {
     cardChainsChecked: "已查询链数",
     cardAddressesChecked: "已查询地址数",
     cardEmptyWallets: "空钱包-链组合数",
+    cardChainsWithBalance: "有余额的链数",
     cardTopFind: "值得注意的余额",
     cardNoStable: "本次未发现 USDC/USDT",
     cardBrand: "wallet-checker — 免费、开源、无需注册",
@@ -214,6 +223,9 @@ const TRANSLATIONS = {
     clear: "清除",
     customRpcSaved: "已保存此链的自定义 RPC — 将优先尝试。",
     customRpcCleared: "已移除自定义 RPC。",
+    grandSummaryTitle: "你实际有余额的地方",
+    grandSummaryNone: "所选链上均未发现余额。",
+    grandSummaryZero: "以下链余额为零：",
   },
 };
 
