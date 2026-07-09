@@ -44,6 +44,7 @@ const statusLine = document.getElementById("statusLine");
 const emptyState = document.getElementById("emptyState");
 const resultsWrap = document.getElementById("resultsWrap");
 const exportBtn = document.getElementById("exportBtn");
+const exportExcelBtn = document.getElementById("exportExcelBtn");
 const reportBtn = document.getElementById("reportBtn");
 const chainCount = document.getElementById("chainCount");
 const reportCardSection = document.getElementById("reportCardSection");
@@ -79,6 +80,7 @@ function applyTranslations() {
   document.getElementById("checkBtnText").textContent = t("checkBalances");
   document.getElementById("stepResultsLabel").textContent = t("stepResults");
   exportBtn.textContent = t("exportCsv");
+  exportExcelBtn.textContent = t("exportExcel");
   reportBtn.textContent = t("exportReport");
   document.getElementById("reportCardLabel").textContent = t("reportCardLabel");
   downloadCardBtn.textContent = t("downloadImage");
@@ -146,6 +148,7 @@ function init() {
 
   checkBtn.addEventListener("click", runCheck);
   exportBtn.addEventListener("click", exportCsv);
+  exportExcelBtn.addEventListener("click", exportExcel);
   reportBtn.addEventListener("click", exportSummaryReport);
   downloadCardBtn.addEventListener("click", downloadReportCardImage);
   customRpcBtn.addEventListener("click", toggleCustomRpcForm);
@@ -171,12 +174,19 @@ function renderChainPickerButton() {
   renderChainNote();
 }
 
+function hexToRgbParts(hex) {
+  if (!hex || hex.length < 7) return null;
+  return {
+    r: parseInt(hex.slice(1, 3), 16),
+    g: parseInt(hex.slice(3, 5), 16),
+    b: parseInt(hex.slice(5, 7), 16),
+  };
+}
+
 function hexToSoft(hex) {
-  if (!hex) return "var(--accent-soft)";
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return `rgba(${r}, ${g}, ${b}, 0.18)`;
+  const rgb = hexToRgbParts(hex);
+  if (!rgb) return "var(--accent-soft)";
+  return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.18)`;
 }
 
 function openChainSheet() {
@@ -554,6 +564,7 @@ function resetResults() {
   resultsWrap.innerHTML = "";
   reportCardSection.hidden = true;
   exportBtn.disabled = true;
+  exportExcelBtn.disabled = true;
   reportBtn.disabled = true;
   lastRunResults = [];
 }
@@ -655,6 +666,7 @@ async function runCheck() {
   setStatus(t("statusDone", { count: totalWork, chain: chainNames }), "");
   checkBtn.disabled = false;
   exportBtn.disabled = false;
+  exportExcelBtn.disabled = false;
   reportBtn.disabled = false;
 
   if (lastRunResults.length > 0) {
@@ -956,6 +968,134 @@ function exportCsv() {
   downloadFile(lines.join("\n"), `wallet-balances-${filenamePart}-${Date.now()}.csv`, "text/csv;charset=utf-8;");
 }
 
+// ===== Export Excel (فایل xlsx واقعی با استایل، برای گوگل‌شیت/اکسل) =====
+// از کتابخانه ExcelJS (بارگذاری‌شده از CDN در index.html) استفاده می‌کند چون
+// نسخه رایگان SheetJS قابلیت رنگ/کادر/فونت ندارد. این تنها وابستگی خارجی
+// پروژه است و فقط هنگام کلیک روی این دکمه لود می‌شود.
+
+const XLSX_ACCENT = "FFC9A15A";
+const XLSX_DARK = "FF1E1A13";
+const XLSX_BORDER_COLOR = "FF3A3225";
+
+function xlsxThinBorder() {
+  const side = { style: "thin", color: { argb: XLSX_BORDER_COLOR } };
+  return { top: side, left: side, right: side, bottom: side };
+}
+
+function styleHeaderRow(row) {
+  row.eachCell((cell) => {
+    cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: XLSX_DARK } };
+    cell.border = xlsxThinBorder();
+    cell.alignment = { vertical: "middle" };
+  });
+}
+
+function safeSheetName(name) {
+  // نام شیت اکسل حداکثر ۳۱ کاراکتر و بدون : \ / ? * [ ]
+  return name.replace(/[:\\/?*\[\]]/g, "").slice(0, 31);
+}
+
+async function exportExcel() {
+  if (lastRunResults.length === 0) return;
+  if (typeof ExcelJS === "undefined") {
+    setStatus(t("error") + ": ExcelJS", "error");
+    return;
+  }
+
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "wallet-checker";
+  workbook.created = new Date();
+
+  // ---------- شیت خلاصه ----------
+  const summarySheet = workbook.addWorksheet(safeSheetName(t("grandSummaryTitle")));
+  summarySheet.columns = [{ width: 24 }, { width: 50 }];
+
+  const titleRow = summarySheet.addRow(["wallet-checker — " + t("reportCardLabel")]);
+  titleRow.font = { bold: true, size: 16, color: { argb: XLSX_ACCENT } };
+  summarySheet.mergeCells(1, 1, 1, 2);
+  summarySheet.addRow([t("reportGenerated") + ": " + new Date().toLocaleString()]).font = { italic: true, color: { argb: "FF888888" } };
+  summarySheet.addRow([]);
+
+  const headerRow = summarySheet.addRow([t("chainSection"), t("cardTopFind")]);
+  styleHeaderRow(headerRow);
+
+  const chainFindingsForSheet = [];
+  lastRunResults.forEach(({ chain, results, tokens }) => {
+    const entries = computeNonZeroTotals(results, tokens, chain);
+    chainFindingsForSheet.push({ chain, entries });
+  });
+
+  const withBalance = chainFindingsForSheet.filter((f) => f.entries.length > 0);
+  const withoutBalance = chainFindingsForSheet.filter((f) => f.entries.length === 0);
+
+  if (withBalance.length === 0) {
+    const row = summarySheet.addRow([t("grandSummaryNone"), ""]);
+    row.getCell(1).border = xlsxThinBorder();
+  } else {
+    withBalance.forEach(({ chain, entries }) => {
+      const valuesStr = entries.map((e) => `${formatDisplay(e.total.toString())} ${e.symbol}`).join("  ·  ");
+      const row = summarySheet.addRow([chain.name, valuesStr]);
+      row.eachCell((cell) => { cell.border = xlsxThinBorder(); });
+      row.getCell(2).font = { color: { argb: "FF8A6A2A" }, bold: true };
+    });
+  }
+
+  if (withoutBalance.length > 0) {
+    summarySheet.addRow([]);
+    const zeroRow = summarySheet.addRow([t("grandSummaryZero"), withoutBalance.map((f) => f.chain.name).join(", ")]);
+    zeroRow.font = { italic: true, color: { argb: "FF888888" } };
+  }
+
+  // ---------- یک شیت جدا برای هر شبکه ----------
+  lastRunResults.forEach(({ chain, results, tokens }) => {
+    const sheet = workbook.addWorksheet(safeSheetName(chain.name));
+    const cols = [{ width: 46 }, { width: 20 }, ...tokens.map(() => ({ width: 16 }))];
+    sheet.columns = cols;
+
+    const headers = [t("address"), `${chain.nativeSymbol} (${t("native")})`, ...tokens.map((tk) => tk.symbol)];
+    const headerRow2 = sheet.addRow(headers);
+    styleHeaderRow(headerRow2);
+
+    const totals = new Array(tokens.length + 1).fill(0);
+
+    results.forEach((r) => {
+      const nativeVal = r.native.error ? "ERR" : parseFloat(r.native.formatted || "0");
+      if (typeof nativeVal === "number") totals[0] += nativeVal;
+
+      const tokenVals = tokens.map((token, i) => {
+        const tr = r.tokens.find((tk) => tk.address.toLowerCase() === token.address.toLowerCase());
+        if (!tr) return "";
+        if (tr.error) return "ERR";
+        const val = parseFloat(tr.formatted || "0");
+        totals[i + 1] += val;
+        return val;
+      });
+
+      const row = sheet.addRow([r.address, nativeVal, ...tokenVals]);
+      row.eachCell((cell) => { cell.border = xlsxThinBorder(); });
+      row.getCell(1).font = { name: "Consolas" };
+    });
+
+    const totalRow = sheet.addRow([t("total"), ...totals]);
+    totalRow.eachCell((cell) => {
+      cell.font = { bold: true, color: { argb: "FF8A6A2A" } };
+      cell.border = xlsxThinBorder();
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF3E9D2" } };
+    });
+  });
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  const filenamePart2 = lastRunResults.length === 1 ? lastRunResults[0].chain.id : "multichain";
+  a.download = `wallet-checker-${filenamePart2}-${Date.now()}.xlsx`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 // ===== Export summary report (multi-chain aware) =====
 
 function exportSummaryReport() {
@@ -1028,42 +1168,31 @@ function computeReportCardStats() {
     totalAddressChecks: 0,
     stablecoinTotal: 0,
     emptyPairs: 0,
-    topFindings: [], // آرایه‌ای از { amount, symbol, chainName } - حداکثر ۳ مورد
+    chainFindings: [], // آرایه‌ای از { chain, entries: [{symbol, total}] } برای هر شبکه‌ای که موجودی دارد (کامل، بدون محدودیت تعداد)
   };
 
   const distinctAddresses = new Set();
-  const allFindings = []; // همه (شبکه، نماد، جمع) های غیرصفر برای انتخاب چندتای برتر
 
   lastRunResults.forEach(({ chain, results, tokens }) => {
-    let chainHasBalance = false;
+    const entries = computeNonZeroTotals(results, tokens, chain);
 
-    const nativeTotal = results.reduce((sum, r) => {
-      distinctAddresses.add(r.address);
-      return r.native.error ? sum : sum + parseFloat(r.native.formatted || "0");
-    }, 0);
-    if (nativeTotal > 0) {
-      allFindings.push({ amount: nativeTotal, symbol: chain.nativeSymbol, chainName: chain.name });
-      chainHasBalance = true;
-    }
+    results.forEach((r) => distinctAddresses.add(r.address));
 
     tokens.forEach((token) => {
+      const symbolUpper = token.symbol.toUpperCase();
+      if (symbolUpper !== "USDC" && symbolUpper !== "USDT") return;
       const tokenTotal = results.reduce((sum, r) => {
         const tr = r.tokens.find((tk) => tk.address.toLowerCase() === token.address.toLowerCase());
-        if (!tr || tr.error) return sum;
-        const val = parseFloat(tr.formatted || "0");
-        const symbolUpper = token.symbol.toUpperCase();
-        if (symbolUpper === "USDC" || symbolUpper === "USDT") stats.stablecoinTotal += val;
-        return sum + val;
+        return tr && !tr.error ? sum + parseFloat(tr.formatted || "0") : sum;
       }, 0);
-      if (tokenTotal > 0) {
-        allFindings.push({ amount: tokenTotal, symbol: token.symbol, chainName: chain.name });
-        chainHasBalance = true;
-      }
+      stats.stablecoinTotal += tokenTotal;
     });
 
-    if (chainHasBalance) stats.chainsWithBalance++;
+    if (entries.length > 0) {
+      stats.chainsWithBalance++;
+      stats.chainFindings.push({ chain, entries });
+    }
 
-    // شمارش جفت‌های آدرس-شبکه کاملاً صفر (برای stat "empty pairs")
     results.forEach((r) => {
       const nativeVal = r.native.error ? 0 : parseFloat(r.native.formatted || "0");
       const tokensSum = tokens.reduce((s, token) => {
@@ -1074,8 +1203,6 @@ function computeReportCardStats() {
     });
   });
 
-  // انتخاب ۳ مورد برتر (فقط برای برجسته‌کردن چند یافته جالب، نه ادعای مقایسه دقیق مالی بین توکن‌های مختلف)
-  stats.topFindings = allFindings.sort((a, b) => b.amount - a.amount).slice(0, 3);
   stats.totalAddressChecks = distinctAddresses.size;
   return stats;
 }
@@ -1083,15 +1210,23 @@ function computeReportCardStats() {
 async function renderReportCard() {
   const stats = computeReportCardStats();
   const canvas = reportCardCanvas;
+
+  // ارتفاع کارت متناسب با تعداد شبکه‌های دارای موجودی محاسبه می‌شود، تا هیچ
+  // یافته‌ای (مثل Soneium در تست قبلی) به‌خاطر جای کم حذف نشود.
+  const HEADER_HEIGHT = 330; // برند + هدلاین استیبل‌کوین + ردیف آمار
+  const ROW_HEIGHT = 46;
+  const FOOTER_HEIGHT = 70;
+  const chainRowsHeight = Math.max(stats.chainFindings.length, 1) * ROW_HEIGHT + 60;
+  const W = 1200;
+  const H = HEADER_HEIGHT + chainRowsHeight + FOOTER_HEIGHT;
+  canvas.width = W;
+  canvas.height = H;
   const ctx = canvas.getContext("2d");
-  const W = canvas.width;
-  const H = canvas.height;
 
   // اطمینان از لود شدن فونت‌های کاستوم قبل از رسم متن روی canvas
   try { await document.fonts.ready; } catch (e) { /* در صورت خطا با فونت پیش‌فرض ادامه می‌دهیم */ }
 
   const COL_BG = "#17140f";
-  const COL_PANEL = "#1e1a13";
   const COL_BORDER = "#3a3225";
   const COL_TEXT = "#ece3d1";
   const COL_TEXT_DIM = "#a89a80";
@@ -1165,8 +1300,9 @@ async function renderReportCard() {
   });
   cursorY += 90;
 
-  // بخش "موجودی‌های قابل‌توجه" - تا ۳ مورد برتر (نه فقط یکی)
-  if (stats.topFindings.length > 0) {
+  // لیست کامل همه شبکه‌های دارای موجودی (بدون محدودیت تعداد؛ دقیقاً مثل جدول
+  // خلاصه بالای صفحه، تا هیچ یافته‌ای مثل Soneium حذف نشود)
+  if (stats.chainFindings.length > 0) {
     ctx.strokeStyle = COL_BORDER;
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -1178,27 +1314,52 @@ async function renderReportCard() {
     ctx.fillStyle = COL_TEXT_DIM;
     ctx.font = "500 14px 'Inter', sans-serif";
     ctx.fillText(t("cardTopFind").toUpperCase(), 60, cursorY);
-    cursorY += 38;
+    cursorY += 36;
 
-    stats.topFindings.forEach((finding) => {
-      const amountStr = finding.amount < 0.000001
-        ? finding.amount.toExponential(2)
-        : finding.amount.toLocaleString(undefined, { maximumFractionDigits: 6 });
+    stats.chainFindings.forEach(({ chain, entries }) => {
+      // آیکون دایره‌ای رنگی شبکه
+      const rgb = hexToRgbParts(chain.color);
+      ctx.beginPath();
+      ctx.arc(72, cursorY - 8, 14, 0, Math.PI * 2);
+      ctx.fillStyle = rgb ? `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.25)` : COL_ACCENT;
+      ctx.fill();
+      ctx.fillStyle = chain.color;
+      ctx.font = "600 13px 'Inter', sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText((chain.icon || "●").slice(0, 1), 72, cursorY - 3);
+      ctx.textAlign = "left";
+
+      // نام شبکه
       ctx.fillStyle = COL_TEXT;
-      ctx.font = "600 26px 'IBM Plex Mono', monospace";
-      ctx.fillText(`${amountStr} ${finding.symbol}`, 60, cursorY);
-      ctx.fillStyle = COL_TEXT_DIM;
-      ctx.font = "italic 400 15px 'Source Serif 4', Georgia, serif";
-      ctx.fillText(finding.chainName, 460, cursorY);
-      cursorY += 42;
+      ctx.font = "600 17px 'Source Serif 4', Georgia, serif";
+      ctx.fillText(chain.name, 100, cursorY);
+
+      // مقادیر (ممکن است چند توکن در یک شبکه باشد)
+      const valuesStr = entries
+        .map((e) => {
+          const amountStr = e.total < 0.000001 ? e.total.toExponential(2) : e.total.toLocaleString(undefined, { maximumFractionDigits: 6 });
+          return `${amountStr} ${e.symbol}`;
+        })
+        .join("   ·   ");
+      ctx.fillStyle = COL_ACCENT;
+      ctx.font = "600 17px 'IBM Plex Mono', monospace";
+      ctx.textAlign = "right";
+      ctx.fillText(valuesStr, W - 60, cursorY);
+      ctx.textAlign = "left";
+
+      cursorY += ROW_HEIGHT;
     });
+  } else {
+    ctx.fillStyle = COL_TEXT_DIM;
+    ctx.font = "italic 400 16px 'Source Serif 4', Georgia, serif";
+    ctx.fillText(t("grandSummaryNone"), 60, cursorY + 20);
   }
 
   // فوتر برند
   ctx.fillStyle = COL_TEXT_DIM;
   ctx.font = "400 14px 'Inter', sans-serif";
   ctx.textAlign = "right";
-  ctx.fillText(t("cardBrand"), W - 60, H - 40);
+  ctx.fillText(t("cardBrand"), W - 60, H - 30);
   ctx.textAlign = "left";
 }
 
