@@ -5,6 +5,7 @@ let selectedChainIds = []; // آرایه شبکه‌های انتخاب‌شده
 let currentChainId = null; // وقتی فقط یک شبکه انتخاب شده، همون برای پنل توکن‌ها استفاده می‌شه
 let lastRunResults = []; // [{chainId, results, tokens}] برای export بعد از هر چک
 let sheetPendingSelection = []; // انتخاب موقت داخل باتم‌شیت قبل از زدن Apply
+let rpcSheetOpenForChainId = null; // کدام شبکه در باتم‌شیت فرم RPC اختصاصی‌اش باز است
 
 // ===== DOM refs =====
 const htmlRoot = document.getElementById("htmlRoot");
@@ -191,6 +192,7 @@ function hexToSoft(hex) {
 
 function openChainSheet() {
   sheetPendingSelection = [...selectedChainIds];
+  rpcSheetOpenForChainId = null;
   chainSheetOverlay.hidden = false;
   chainSearchInput.value = "";
   // requestAnimationFrame تضمین می‌کند رندر لیست بعد از این‌که مرورگر layout
@@ -292,9 +294,23 @@ function renderChainSheetList(query) {
       name.className = "sheet-item-name";
       name.textContent = chain.name;
 
+      const overrides = loadRpcOverrides();
+      const hasOverride = !!overrides[id];
+      const rpcGear = document.createElement("button");
+      rpcGear.type = "button";
+      rpcGear.className = "sheet-item-rpc-gear" + (hasOverride ? " has-override" : "");
+      rpcGear.textContent = "⚙";
+      rpcGear.title = t("customRpc");
+      rpcGear.addEventListener("click", (e) => {
+        e.stopPropagation();
+        rpcSheetOpenForChainId = rpcSheetOpenForChainId === id ? null : id;
+        renderChainSheetList(chainSearchInput.value);
+      });
+
       item.appendChild(checkbox);
       item.appendChild(icon);
       item.appendChild(name);
+      item.appendChild(rpcGear);
 
       const toggle = () => {
         if (sheetPendingSelection.includes(id)) {
@@ -312,6 +328,52 @@ function renderChainSheetList(query) {
       item.addEventListener("click", toggle);
 
       chainSheetList.appendChild(item);
+
+      if (rpcSheetOpenForChainId === id) {
+        const rpcRow = document.createElement("div");
+        rpcRow.className = "sheet-item-rpc-form";
+
+        const rpcInput = document.createElement("input");
+        rpcInput.className = "input";
+        rpcInput.type = "text";
+        rpcInput.placeholder = t("customRpcPlaceholder");
+        rpcInput.value = overrides[id] || "";
+        rpcInput.addEventListener("click", (e) => e.stopPropagation());
+
+        const rpcActions = document.createElement("div");
+        rpcActions.className = "sheet-item-rpc-actions";
+
+        const rpcSaveBtn = document.createElement("button");
+        rpcSaveBtn.type = "button";
+        rpcSaveBtn.className = "btn-primary btn-small";
+        rpcSaveBtn.textContent = t("save");
+        rpcSaveBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const url = rpcInput.value.trim();
+          if (!url) return;
+          saveRpcOverride(id, url);
+          rpcSheetOpenForChainId = null;
+          renderChainSheetList(chainSearchInput.value);
+        });
+
+        const rpcClearBtn = document.createElement("button");
+        rpcClearBtn.type = "button";
+        rpcClearBtn.className = "btn-ghost btn-small";
+        rpcClearBtn.textContent = t("clear");
+        rpcClearBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          clearRpcOverride(id);
+          rpcInput.value = "";
+          renderChainSheetList(chainSearchInput.value);
+        });
+
+        rpcActions.appendChild(rpcSaveBtn);
+        rpcActions.appendChild(rpcClearBtn);
+        rpcRow.appendChild(rpcInput);
+        rpcRow.appendChild(rpcActions);
+        rpcRow.addEventListener("click", (e) => e.stopPropagation());
+        chainSheetList.appendChild(rpcRow);
+      }
     });
   });
 }
@@ -644,17 +706,25 @@ async function runCheck() {
     );
 
     renderChainTotals(section.totalsBar, results, tokens, chain);
-    lastRunResults.push({ chainId, chain, results, tokens });
+    const chainHadErrors = chainHasAnyError(results);
+    lastRunResults.push({ chainId, chain, results, tokens, hasErrors: chainHadErrors });
 
     // محاسبه اینکه آیا این شبکه اصلاً موجودی غیرصفر داشته، برای collapse خودکار
     const nonZeroEntries = computeNonZeroTotals(results, tokens, chain);
     const hasBalance = nonZeroEntries.length > 0;
-    if (section.container.tagName === "DETAILS") section.container.open = hasBalance;
+    // شبکه‌هایی که خطای RPC داشتن هم باز نگه داشته می‌شوند تا کاربر متوجه مشکل بشود،
+    // نه فقط شبکه‌های دارای موجودی واقعی
+    if (section.container.tagName === "DETAILS") section.container.open = hasBalance || chainHadErrors;
     if (section.statusBadge) {
-      section.statusBadge.textContent = hasBalance ? "●" : "—";
-      section.statusBadge.classList.toggle("has-balance", hasBalance);
+      if (chainHadErrors) {
+        section.statusBadge.textContent = "⚠";
+        section.statusBadge.classList.add("has-error");
+      } else {
+        section.statusBadge.textContent = hasBalance ? "●" : "—";
+        section.statusBadge.classList.toggle("has-balance", hasBalance);
+      }
     }
-    if (isMulti) chainFindings.push({ chain, nonZeroEntries });
+    if (isMulti) chainFindings.push({ chain, nonZeroEntries, hasErrors: chainHadErrors });
   }
 
   if (isMulti) {
@@ -692,6 +762,12 @@ function computeNonZeroTotals(results, tokens, chain) {
   });
 
   return entries;
+}
+
+// آیا حداقل یک آدرس روی این شبکه با خطای RPC مواجه شده؟ این با "موجودی صفر واقعی"
+// فرق دارد — صفر یعنی چک شد و چیزی نبود، خطا یعنی اصلاً نتوانستیم چک کنیم.
+function chainHasAnyError(results) {
+  return results.some((r) => r.native.error || r.tokens.some((tk) => tk.error));
 }
 
 // جدول خلاصه بالای صفحه: فقط شبکه‌هایی که موجودی دارند به‌صورت کامل نشان داده می‌شوند؛
@@ -757,10 +833,22 @@ function buildGrandSummary(chainFindings) {
   }
 
   if (withoutBalance.length > 0) {
-    const zeroLine = document.createElement("div");
-    zeroLine.className = "grand-summary-zero-line";
-    zeroLine.textContent = `${t("grandSummaryZero")}: ${withoutBalance.map((f) => f.chain.name).join(", ")}`;
-    wrap.appendChild(zeroLine);
+    const zeroConfirmed = withoutBalance.filter((f) => !f.hasErrors);
+    const withErrors = withoutBalance.filter((f) => f.hasErrors);
+
+    if (zeroConfirmed.length > 0) {
+      const zeroLine = document.createElement("div");
+      zeroLine.className = "grand-summary-zero-line";
+      zeroLine.textContent = `${t("grandSummaryZero")}: ${zeroConfirmed.map((f) => f.chain.name).join(", ")}`;
+      wrap.appendChild(zeroLine);
+    }
+
+    if (withErrors.length > 0) {
+      const errorLine = document.createElement("div");
+      errorLine.className = "grand-summary-error-line";
+      errorLine.textContent = `⚠ ${t("grandSummaryErrors")}: ${withErrors.map((f) => f.chain.name).join(", ")}`;
+      wrap.appendChild(errorLine);
+    }
   }
 
   return wrap;
@@ -1021,9 +1109,9 @@ async function exportExcel() {
   styleHeaderRow(headerRow);
 
   const chainFindingsForSheet = [];
-  lastRunResults.forEach(({ chain, results, tokens }) => {
+  lastRunResults.forEach(({ chain, results, tokens, hasErrors }) => {
     const entries = computeNonZeroTotals(results, tokens, chain);
-    chainFindingsForSheet.push({ chain, entries });
+    chainFindingsForSheet.push({ chain, entries, hasErrors });
   });
 
   const withBalance = chainFindingsForSheet.filter((f) => f.entries.length > 0);
@@ -1042,16 +1130,33 @@ async function exportExcel() {
   }
 
   if (withoutBalance.length > 0) {
-    summarySheet.addRow([]);
-    const zeroRow = summarySheet.addRow([t("grandSummaryZero"), withoutBalance.map((f) => f.chain.name).join(", ")]);
-    zeroRow.font = { italic: true, color: { argb: "FF888888" } };
+    const zeroConfirmed = withoutBalance.filter((f) => !f.hasErrors);
+    const withErrors = withoutBalance.filter((f) => f.hasErrors);
+
+    if (zeroConfirmed.length > 0) {
+      summarySheet.addRow([]);
+      const zeroRow = summarySheet.addRow([t("grandSummaryZero"), zeroConfirmed.map((f) => f.chain.name).join(", ")]);
+      zeroRow.font = { italic: true, color: { argb: "FF888888" } };
+    }
+
+    if (withErrors.length > 0) {
+      const errorRow = summarySheet.addRow(["⚠ " + t("grandSummaryErrors"), withErrors.map((f) => f.chain.name).join(", ")]);
+      errorRow.font = { bold: true, color: { argb: "FFC0654A" } };
+    }
   }
 
   // ---------- یک شیت جدا برای هر شبکه ----------
-  lastRunResults.forEach(({ chain, results, tokens }) => {
+  lastRunResults.forEach(({ chain, results, tokens, hasErrors }) => {
     const sheet = workbook.addWorksheet(safeSheetName(chain.name));
     const cols = [{ width: 46 }, { width: 20 }, ...tokens.map(() => ({ width: 16 }))];
     sheet.columns = cols;
+
+    if (hasErrors) {
+      const warnRow = sheet.addRow(["⚠ " + t("grandSummaryErrors") + " " + chain.name]);
+      warnRow.font = { bold: true, color: { argb: "FFC0654A" } };
+      sheet.mergeCells(warnRow.number, 1, warnRow.number, cols.length);
+      sheet.addRow([]);
+    }
 
     const headers = [t("address"), `${chain.nativeSymbol} (${t("native")})`, ...tokens.map((tk) => tk.symbol)];
     const headerRow2 = sheet.addRow(headers);
@@ -1075,6 +1180,9 @@ async function exportExcel() {
       const row = sheet.addRow([r.address, nativeVal, ...tokenVals]);
       row.eachCell((cell) => { cell.border = xlsxThinBorder(); });
       row.getCell(1).font = { name: "Consolas" };
+      row.eachCell((cell, colNum) => {
+        if (cell.value === "ERR") cell.font = { color: { argb: "FFC0654A" }, bold: true };
+      });
     });
 
     const totalRow = sheet.addRow([t("total"), ...totals]);
@@ -1106,9 +1214,14 @@ function exportSummaryReport() {
   lines.push("");
   lines.push(`- ${t("reportGenerated")}: ${new Date().toISOString()}`);
   lines.push(`- ${t("reportAddressCount")}: ${parseAddresses().filter(isAddressValidForAnySelected).length}`);
+
+  const chainsWithErrors = lastRunResults.filter((r) => r.hasErrors).map((r) => r.chain.name);
+  if (chainsWithErrors.length > 0) {
+    lines.push(`- ⚠ ${t("grandSummaryErrors")}: ${chainsWithErrors.join(", ")}`);
+  }
   lines.push("");
 
-  lastRunResults.forEach(({ chain, results, tokens }) => {
+  lastRunResults.forEach(({ chain, results, tokens, hasErrors }) => {
     const nativeTotal = results.reduce((sum, r) => r.native.error ? sum : sum + parseFloat(r.native.formatted), 0);
     const tokenTotals = tokens.map((token) => {
       const total = results.reduce((sum, r) => {
@@ -1120,6 +1233,9 @@ function exportSummaryReport() {
     });
 
     lines.push(`## ${t("reportChain")}: ${chain.name} (chainId: ${chain.chainNumericId})`);
+    if (hasErrors) {
+      lines.push(`⚠ ${t("grandSummaryErrors")}`);
+    }
     lines.push("");
     lines.push(`### ${t("reportTotals")}`);
     lines.push(`- ${chain.nativeSymbol}: ${formatDisplay(nativeTotal.toString())}`);
@@ -1169,11 +1285,12 @@ function computeReportCardStats() {
     stablecoinTotal: 0,
     emptyPairs: 0,
     chainFindings: [], // آرایه‌ای از { chain, entries: [{symbol, total}] } برای هر شبکه‌ای که موجودی دارد (کامل، بدون محدودیت تعداد)
+    chainsWithErrors: [], // نام شبکه‌هایی که با خطای RPC مواجه شدند (داده‌شان قابل اعتماد نیست)
   };
 
   const distinctAddresses = new Set();
 
-  lastRunResults.forEach(({ chain, results, tokens }) => {
+  lastRunResults.forEach(({ chain, results, tokens, hasErrors }) => {
     const entries = computeNonZeroTotals(results, tokens, chain);
 
     results.forEach((r) => distinctAddresses.add(r.address));
@@ -1192,6 +1309,8 @@ function computeReportCardStats() {
       stats.chainsWithBalance++;
       stats.chainFindings.push({ chain, entries });
     }
+
+    if (hasErrors) stats.chainsWithErrors.push(chain.name);
 
     results.forEach((r) => {
       const nativeVal = r.native.error ? 0 : parseFloat(r.native.formatted || "0");
@@ -1216,9 +1335,10 @@ async function renderReportCard() {
   const HEADER_HEIGHT = 330; // برند + هدلاین استیبل‌کوین + ردیف آمار
   const ROW_HEIGHT = 46;
   const FOOTER_HEIGHT = 70;
+  const ERROR_LINE_HEIGHT = stats.chainsWithErrors.length > 0 ? 50 : 0;
   const chainRowsHeight = Math.max(stats.chainFindings.length, 1) * ROW_HEIGHT + 60;
   const W = 1200;
-  const H = HEADER_HEIGHT + chainRowsHeight + FOOTER_HEIGHT;
+  const H = HEADER_HEIGHT + chainRowsHeight + ERROR_LINE_HEIGHT + FOOTER_HEIGHT;
   canvas.width = W;
   canvas.height = H;
   const ctx = canvas.getContext("2d");
@@ -1231,6 +1351,7 @@ async function renderReportCard() {
   const COL_TEXT = "#ece3d1";
   const COL_TEXT_DIM = "#a89a80";
   const COL_ACCENT = "#c9a15a";
+  const COL_ERROR = "#c0654a";
 
   // پس‌زمینه
   ctx.fillStyle = COL_BG;
@@ -1353,6 +1474,15 @@ async function renderReportCard() {
     ctx.fillStyle = COL_TEXT_DIM;
     ctx.font = "italic 400 16px 'Source Serif 4', Georgia, serif";
     ctx.fillText(t("grandSummaryNone"), 60, cursorY + 20);
+    cursorY += 20;
+  }
+
+  // هشدار شبکه‌هایی که خطای RPC داشتن (داده‌شان قابل اعتماد نیست، صفر واقعی نیست)
+  if (stats.chainsWithErrors.length > 0) {
+    cursorY += 34;
+    ctx.fillStyle = COL_ERROR;
+    ctx.font = "600 15px 'Inter', sans-serif";
+    ctx.fillText(`⚠ ${t("grandSummaryErrors")}: ${stats.chainsWithErrors.join(", ")}`, 60, cursorY);
   }
 
   // فوتر برند

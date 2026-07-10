@@ -79,6 +79,7 @@ const TRANSLATIONS = {
     grandSummaryTitle: "Where you actually have balance",
     grandSummaryNone: "No balance found on any selected chain.",
     grandSummaryZero: "Zero balance on",
+    grandSummaryErrors: "Could not verify (RPC issue) on",
   },
   fa: {
     dir: "rtl",
@@ -154,6 +155,7 @@ const TRANSLATIONS = {
     grandSummaryTitle: "کجا واقعاً موجودی داری",
     grandSummaryNone: "هیچ موجودی‌ای رو هیچ‌کدوم از شبکه‌های انتخابی پیدا نشد.",
     grandSummaryZero: "موجودی صفر روی",
+    grandSummaryErrors: "قابل تایید نبود (مشکل RPC) روی",
   },
   zh: {
     dir: "ltr",
@@ -229,6 +231,7 @@ const TRANSLATIONS = {
     grandSummaryTitle: "你实际有余额的地方",
     grandSummaryNone: "所选链上均未发现余额。",
     grandSummaryZero: "以下链余额为零：",
+    grandSummaryErrors: "以下链因 RPC 问题无法验证：",
   },
 };
 

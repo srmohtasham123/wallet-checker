@@ -186,13 +186,20 @@ const CHAINS = {
   soneium: {
     id: "soneium", chainType: "evm", name: "Soneium", group: "niche", chainNumericId: 1868,
     nativeSymbol: "ETH", icon: "◔", color: "#000000",
-    rpcUrls: ["https://rpc.soneium.org"],
+    rpcUrls: [
+      "https://rpc.soneium.org",
+      "https://soneium.drpc.org",
+    ],
     defaultTokens: [],
   },
   taiko: {
     id: "taiko", chainType: "evm", name: "Taiko", group: "niche", chainNumericId: 167000,
     nativeSymbol: "ETH", icon: "▧", color: "#e81899",
-    rpcUrls: ["https://rpc.mainnet.taiko.xyz"],
+    rpcUrls: [
+      "https://rpc.mainnet.taiko.xyz",
+      "https://mainnet.taiko-rpc.com",
+      "https://rpc.ankr.com/taiko",
+    ],
     defaultTokens: [],
   },
   rarichain: {
@@ -230,7 +237,12 @@ const CHAINS = {
   celo: {
     id: "celo", chainType: "evm", name: "Celo", group: "niche", chainNumericId: 42220,
     nativeSymbol: "CELO", icon: "◕", color: "#fcff52",
-    rpcUrls: ["https://forno.celo.org"],
+    rpcUrls: [
+      "https://forno.celo.org",
+      "https://rpc.ankr.com/celo",
+      "https://celo.drpc.org",
+      "https://celo.api.onfinality.io/public",
+    ],
     defaultTokens: [
       { symbol: "USDC", address: "0xcebA9300f2b948710d2653dD7B07f33A8B32118C", decimals: 6 },
     ],
@@ -238,7 +250,11 @@ const CHAINS = {
   sonic: {
     id: "sonic", chainType: "evm", name: "Sonic", group: "niche", chainNumericId: 146,
     nativeSymbol: "S", icon: "»", color: "#fe9a2d",
-    rpcUrls: ["https://rpc.soniclabs.com"],
+    rpcUrls: [
+      "https://rpc.soniclabs.com",
+      "https://sonic.drpc.org",
+      "https://rpc.ankr.com/sonic",
+    ],
     defaultTokens: [
       { symbol: "USDC", address: "0x29219dd400f2Bf60E5a23d13Be72B486D4038894", decimals: 6 },
     ],
