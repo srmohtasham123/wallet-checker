@@ -1,6 +1,25 @@
 // app.js
 // منطق اصلی: i18n، منوی iOS-style انتخاب چند شبکه، select-all توکن‌ها، اجرای چک، گزارش خلاصه
 
+const CONCURRENCY_LIMIT = 6; // حداکثر آدرس هم‌زمان در حال چک برای هر شبکه (جلوگیری از rate-limit روی RPCهای رایگان)
+
+/**
+ * پردازش یک آرایه با حداکثر `limit` عملیات هم‌زمان (worker pool ساده)، به‌جای
+ * Promise.all بدون محدودیت که همه آیتم‌ها را یکجا شلیک می‌کند. این دقیقاً همان
+ * اصلاحی است که برای رفع خطاهای rate-limit زیر بار سنگین (تست ۳۹۱۲ چک هم‌زمان) لازم بود.
+ */
+async function runWithConcurrency(items, limit, fn) {
+  let nextIndex = 0;
+  async function worker() {
+    while (nextIndex < items.length) {
+      const current = nextIndex++;
+      await fn(items[current], current);
+    }
+  }
+  const workerCount = Math.min(limit, items.length);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+}
+
 let selectedChainIds = []; // آرایه شبکه‌های انتخاب‌شده برای چک (چندتایی)
 let currentChainId = null; // وقتی فقط یک شبکه انتخاب شده، همون برای پنل توکن‌ها استفاده می‌شه
 let lastRunResults = []; // [{chainId, results, tokens}] برای export بعد از هر چک
@@ -23,6 +42,11 @@ const chainSearchInput = document.getElementById("chainSearchInput");
 const chainSheetList = document.getElementById("chainSheetList");
 const sheetSelectedCount = document.getElementById("sheetSelectedCount");
 const sheetApplyBtn = document.getElementById("sheetApplyBtn");
+
+const rpcStatusBtn = document.getElementById("rpcStatusBtn");
+const rpcStatusOverlay = document.getElementById("rpcStatusOverlay");
+const rpcStatusCloseBtn = document.getElementById("rpcStatusCloseBtn");
+const rpcStatusList = document.getElementById("rpcStatusList");
 
 const addressInput = document.getElementById("addressInput");
 const addressCount = document.getElementById("addressCount");
@@ -86,6 +110,9 @@ function applyTranslations() {
   document.getElementById("reportCardLabel").textContent = t("reportCardLabel");
   downloadCardBtn.textContent = t("downloadImage");
   customRpcBtn.textContent = customRpcForm.hidden ? t("customRpc") : t("closeForm");
+  document.getElementById("rpcStatusBtnText").textContent = t("rpcStatusBtnText");
+  document.getElementById("rpcStatusTitle").textContent = t("rpcStatusTitle");
+  document.getElementById("rpcStatusHint").textContent = t("rpcStatusHint");
   customRpcInput.placeholder = t("customRpcPlaceholder");
   customRpcSave.textContent = t("save");
   customRpcClear.textContent = t("clear");
@@ -138,6 +165,15 @@ function init() {
   });
   chainSearchInput.addEventListener("input", () => renderChainSheetList(chainSearchInput.value));
   sheetApplyBtn.addEventListener("click", applyChainSelection);
+
+  rpcStatusBtn.addEventListener("click", openRpcStatusPanel);
+  rpcStatusCloseBtn.addEventListener("click", closeRpcStatusPanel);
+  rpcStatusOverlay.addEventListener("click", (e) => {
+    if (e.target === rpcStatusOverlay) closeRpcStatusPanel();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !rpcStatusOverlay.hidden) closeRpcStatusPanel();
+  });
 
   addressInput.addEventListener("input", updateAddressCount);
 
@@ -204,6 +240,118 @@ function openChainSheet() {
 
 function closeChainSheet() {
   chainSheetOverlay.hidden = true;
+}
+
+// ===== پنل وضعیت RPC (شبیه Chainlist) =====
+
+function openRpcStatusPanel() {
+  rpcStatusOverlay.hidden = false;
+  requestAnimationFrame(() => renderRpcStatusList());
+}
+
+function closeRpcStatusPanel() {
+  rpcStatusOverlay.hidden = true;
+}
+
+function renderRpcStatusList() {
+  rpcStatusList.innerHTML = "";
+  const groups = { popular: [], niche: [] };
+  Object.keys(CHAINS).forEach((id) => {
+    const g = CHAINS[id].group === "niche" ? "niche" : "popular";
+    groups[g].push(id);
+  });
+
+  const groupLabels = { popular: t("groupPopular"), niche: t("groupNiche") };
+
+  ["popular", "niche"].forEach((groupKey) => {
+    if (groups[groupKey].length === 0) return;
+    const label = document.createElement("div");
+    label.className = "sheet-group-label";
+    label.textContent = groupLabels[groupKey];
+    label.style.padding = "10px 8px 4px";
+    rpcStatusList.appendChild(label);
+
+    groups[groupKey].forEach((id) => {
+      rpcStatusList.appendChild(buildRpcStatusChainRow(id));
+    });
+  });
+}
+
+function buildRpcStatusChainRow(chainId) {
+  const chain = CHAINS[chainId];
+  const wrapper = document.createElement("div");
+
+  const row = document.createElement("div");
+  row.className = "rpc-status-chain-row";
+
+  const icon = document.createElement("span");
+  icon.className = "chain-section-icon";
+  icon.textContent = chain.icon || "●";
+  icon.style.background = hexToSoft(chain.color);
+  icon.style.color = chain.color;
+
+  const name = document.createElement("span");
+  name.className = "rpc-status-chain-name";
+  name.textContent = chain.name;
+
+  const pingBtn = document.createElement("button");
+  pingBtn.type = "button";
+  pingBtn.className = "rpc-ping-btn";
+  pingBtn.textContent = t("pingChain");
+
+  const resultHost = document.createElement("div");
+  resultHost.className = "rpc-result-list";
+
+  pingBtn.addEventListener("click", async () => {
+    pingBtn.disabled = true;
+    pingBtn.textContent = t("pinging");
+    const urls = getEffectiveRpcUrls(chainId);
+    const pingFn = chain.chainType === "solana" ? pingSolanaRpc : pingEvmRpc;
+    const results = await Promise.all(urls.map((u) => pingFn(u)));
+    recordPingResults(chainId, results);
+    renderRpcResultRows(resultHost, results);
+    pingBtn.disabled = false;
+    pingBtn.textContent = t("pingChain");
+  });
+
+  row.appendChild(icon);
+  row.appendChild(name);
+  row.appendChild(pingBtn);
+  wrapper.appendChild(row);
+  wrapper.appendChild(resultHost);
+
+  // اگر از قبل (همین سشن) نتیجه پینگ داریم، نشانش بده
+  const existing = getPingResults(chainId);
+  if (existing) renderRpcResultRows(resultHost, existing);
+
+  return wrapper;
+}
+
+function renderRpcResultRows(host, results) {
+  host.innerHTML = "";
+  const sorted = [...results].sort((a, b) => {
+    if (a.ok && !b.ok) return -1;
+    if (!a.ok && b.ok) return 1;
+    if (a.ok && b.ok) return a.latencyMs - b.latencyMs;
+    return 0;
+  });
+  sorted.forEach((r) => {
+    const row = document.createElement("div");
+    row.className = "rpc-result-row";
+    const dot = document.createElement("span");
+    dot.className = "rpc-result-dot " + (r.ok ? "ok" : "fail");
+    const url = document.createElement("span");
+    url.className = "rpc-result-url";
+    url.textContent = r.url;
+    url.title = r.url;
+    const latency = document.createElement("span");
+    latency.className = "rpc-result-latency" + (r.ok && r.latencyMs < 400 ? " fast" : "");
+    latency.textContent = r.ok ? `${r.latencyMs}ms` : t("pingFailed");
+    row.appendChild(dot);
+    row.appendChild(url);
+    row.appendChild(latency);
+    host.appendChild(row);
+  });
 }
 
 function applyChainSelection() {
@@ -695,15 +843,16 @@ async function runCheck() {
     resultsWrap.appendChild(section.container);
 
     const results = [];
-    await Promise.all(
-      addresses.map(async (addr, i) => {
-        const result = await checkFn(effectiveChain, addr, tokens);
-        results[i] = result;
-        fillRow(section.rowEls[i], result, tokens);
-        totalDone++;
-        setStatus(t("statusProgress", { done: totalDone, total: totalWork }), "active");
-      })
-    );
+    // به‌جای Promise.all بدون محدودیت (که با ۱۶۰+ آدرس، صدها درخواست هم‌زمان به یک
+    // RPC رایگان می‌فرستد و rate-limit می‌خورد)، حداکثر CONCURRENCY_LIMIT آدرس
+    // به‌صورت هم‌زمان پردازش می‌شوند — دقیقاً همان مشکلی که در تست ۳۹۱۲ چکی دیده شد.
+    await runWithConcurrency(addresses, CONCURRENCY_LIMIT, async (addr, i) => {
+      const result = await checkFn(effectiveChain, addr, tokens);
+      results[i] = result;
+      fillRow(section.rowEls[i], result, tokens);
+      totalDone++;
+      setStatus(t("statusProgress", { done: totalDone, total: totalWork }), "active");
+    });
 
     renderChainTotals(section.totalsBar, results, tokens, chain);
     const chainHadErrors = chainHasAnyError(results);
@@ -930,7 +1079,21 @@ function buildLoadingRow(address, tokens) {
 
   const addrTd = document.createElement("td");
   addrTd.className = "addr-cell";
-  addrTd.textContent = address;
+
+  const addrText = document.createElement("span");
+  addrText.className = "addr-text";
+  addrText.textContent = shortenAddress(address);
+  addrText.title = address;
+
+  const copyBtn = document.createElement("button");
+  copyBtn.type = "button";
+  copyBtn.className = "addr-copy-btn";
+  copyBtn.textContent = "⧉";
+  copyBtn.title = t("copyAddress");
+  copyBtn.addEventListener("click", () => copyAddressToClipboard(address, copyBtn));
+
+  addrTd.appendChild(addrText);
+  addrTd.appendChild(copyBtn);
   tr.appendChild(addrTd);
 
   const nativeTd = document.createElement("td");
@@ -951,6 +1114,31 @@ function buildLoadingRow(address, tokens) {
   });
 
   return { tr, nativeTd, tokenTds };
+}
+
+function copyAddressToClipboard(address, btnEl) {
+  const done = () => {
+    const original = btnEl.textContent;
+    btnEl.textContent = "✓";
+    btnEl.classList.add("copied");
+    setTimeout(() => {
+      btnEl.textContent = original;
+      btnEl.classList.remove("copied");
+    }, 1200);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(address).then(done).catch(() => {});
+  } else {
+    // fallback برای مرورگرهای قدیمی‌تر که Clipboard API ندارند
+    const ta = document.createElement("textarea");
+    ta.value = address;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand("copy"); done(); } catch (e) { /* بی‌صدا نادیده گرفته می‌شود */ }
+    document.body.removeChild(ta);
+  }
 }
 
 function fillRow(rowEls, result, tokens) {

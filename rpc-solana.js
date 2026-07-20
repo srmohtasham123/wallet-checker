@@ -15,7 +15,7 @@ function isValidSolanaAddress(addr) {
   return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(addr);
 }
 
-async function solanaRpcCall(rpcUrls, method, params) {
+async function solanaRpcCallOnce(rpcUrls, method, params) {
   let lastError = null;
   for (const url of rpcUrls) {
     const controller = new AbortController();
@@ -39,6 +39,52 @@ async function solanaRpcCall(rpcUrls, method, params) {
     }
   }
   throw lastError || new Error("All Solana RPCs failed");
+}
+
+/**
+ * دقیقاً مثل rpcCall در rpc.js: اگر کل لیست RPC شکست بخورد، با تاخیر تصادفی
+ * (jitter) دوباره امتحان می‌کند تا خطاهای گذرای rate-limit را جذب کند.
+ */
+async function solanaRpcCall(rpcUrls, method, params) {
+  let lastError = null;
+  for (let attempt = 0; attempt <= RPC_MAX_RETRIES; attempt++) {
+    try {
+      return await solanaRpcCallOnce(rpcUrls, method, params);
+    } catch (e) {
+      lastError = e;
+      if (attempt < RPC_MAX_RETRIES) {
+        const backoff = 500 * (attempt + 1) + Math.random() * 400;
+        await sleep(backoff);
+      }
+    }
+  }
+  throw lastError || new Error("All Solana RPCs failed");
+}
+
+/**
+ * پینگ سبک یک RPC سولانا: از getHealth استفاده می‌کند که دقیقاً برای همین منظور
+ * (چک سلامت/دسترسی‌پذیری بدون بار محاسباتی) طراحی شده — سبک‌تر از getBalance.
+ */
+async function pingSolanaRpc(url) {
+  const start = performance.now();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), PING_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getHealth", params: [] }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    // getHealth ممکن است خطای عمدی "unhealthy" برگرداند (یعنی نود هست ولی هنوز sync نشده)؛
+    // این هم یعنی RPC در دسترس است و جواب می‌دهد، پس آن را هم موفق حساب می‌کنیم
+    return { url, ok: true, latencyMs: Math.round(performance.now() - start) };
+  } catch (e) {
+    clearTimeout(timeoutId);
+    return { url, ok: false, latencyMs: null, error: e.message || "failed" };
+  }
 }
 
 /**

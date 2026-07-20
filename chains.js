@@ -336,9 +336,38 @@ function clearRpcOverride(chainId) {
 
 function getEffectiveRpcUrls(chainId) {
   const overrides = loadRpcOverrides();
-  const base = CHAINS[chainId]?.rpcUrls || [];
+  let base = CHAINS[chainId]?.rpcUrls || [];
   if (overrides[chainId]) {
-    return [overrides[chainId], ...base];
+    base = [overrides[chainId], ...base];
   }
-  return base;
+
+  // اگر این شبکه در همین سشن پینگ شده، سریع‌ترین RPCهای موفق را اول قرار می‌دهیم.
+  // این فقط در حافظه است (نه localStorage) و با رفرش صفحه از بین می‌رود، دقیقاً
+  // همان‌طور که خواسته شد ("خودکار سریع‌ترین را اول بذاره برای همون سشن").
+  const pings = rpcPingResults[chainId];
+  if (!pings || pings.length === 0) return base;
+
+  const pingedUrlSet = new Set(pings.map((p) => p.url));
+  const successOrdered = pings
+    .filter((p) => p.ok)
+    .sort((a, b) => a.latencyMs - b.latencyMs)
+    .map((p) => p.url);
+  const failedUrls = pings.filter((p) => !p.ok).map((p) => p.url);
+  const unpingedUrls = base.filter((u) => !pingedUrlSet.has(u));
+
+  return [...successOrdered, ...unpingedUrls, ...failedUrls];
+}
+
+// ===== نتایج پینگ RPC (فقط در حافظه، مخصوص همین سشن مرورگر) =====
+// دقیقاً شبیه Chainlist: کاربر با کلیک روی "Ping" وضعیت و تاخیر هر RPC یک شبکه را
+// می‌بیند، و برای بقیه همین سشن، سریع‌ترین RPCهای موفق خودکار اول امتحان می‌شوند.
+
+let rpcPingResults = {}; // chainId -> [{ url, ok, latencyMs, error? }]
+
+function recordPingResults(chainId, results) {
+  rpcPingResults[chainId] = results;
+}
+
+function getPingResults(chainId) {
+  return rpcPingResults[chainId] || null;
 }

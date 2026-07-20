@@ -21,6 +21,10 @@
         <span class="dot">·</span>
         <span id="topbarMetaText">direct RPC · no API key</span>
       </div>
+      <button id="rpcStatusBtn" class="rpc-status-btn" type="button">
+        <span class="rpc-status-icon">◎</span>
+        <span id="rpcStatusBtnText">RPC Status</span>
+      </button>
       <div class="lang-switch" id="langSwitch">
         <button class="lang-btn" data-lang="en" type="button">EN</button>
         <button class="lang-btn" data-lang="fa" type="button">فا</button>
@@ -156,6 +160,19 @@
       <span id="sheetSelectedCount" class="sheet-selected-count">1 selected</span>
       <button id="sheetApplyBtn" class="btn-primary btn-small" type="button">Apply</button>
     </div>
+  </div>
+</div>
+
+<!-- پنل وضعیت RPC (شبیه Chainlist): پینگ دستی هر شبکه، مرتب‌سازی خودکار سریع‌ترین برای این سشن -->
+<div id="rpcStatusOverlay" class="sheet-overlay" hidden>
+  <div class="sheet sheet-wide" id="rpcStatusSheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-header">
+      <h3 id="rpcStatusTitle">RPC Status</h3>
+      <button id="rpcStatusCloseBtn" class="sheet-close" type="button" aria-label="Close">✕</button>
+    </div>
+    <p id="rpcStatusHint" class="rpc-status-hint">Ping is manual and per-chain to avoid extra load on public RPCs.</p>
+    <div id="rpcStatusList" class="sheet-list rpc-status-list"></div>
   </div>
 </div>
 
