@@ -843,6 +843,9 @@ async function runCheck() {
     resultsWrap.appendChild(section.container);
 
     const results = [];
+    let chainDone = 0;
+    if (section.progressBar) section.progressBar.classList.add("active");
+
     // به‌جای Promise.all بدون محدودیت (که با ۱۶۰+ آدرس، صدها درخواست هم‌زمان به یک
     // RPC رایگان می‌فرستد و rate-limit می‌خورد)، حداکثر CONCURRENCY_LIMIT آدرس
     // به‌صورت هم‌زمان پردازش می‌شوند — دقیقاً همان مشکلی که در تست ۳۹۱۲ چکی دیده شد.
@@ -851,6 +854,10 @@ async function runCheck() {
       results[i] = result;
       fillRow(section.rowEls[i], result, tokens);
       totalDone++;
+      chainDone++;
+      if (section.progressFill) {
+        section.progressFill.style.width = `${(chainDone / addresses.length) * 100}%`;
+      }
       setStatus(t("statusProgress", { done: totalDone, total: totalWork }), "active");
     });
 
@@ -861,6 +868,13 @@ async function runCheck() {
     // محاسبه اینکه آیا این شبکه اصلاً موجودی غیرصفر داشته، برای collapse خودکار
     const nonZeroEntries = computeNonZeroTotals(results, tokens, chain);
     const hasBalance = nonZeroEntries.length > 0;
+
+    // نوار پیشرفت کارش تمام شد؛ اگر موجودی پیدا شده بود، قبل از محوشدن سیگنال می‌گیرد
+    if (section.progressBar) {
+      section.progressBar.classList.remove("active");
+      section.progressBar.classList.add("done");
+      if (hasBalance) section.progressBar.classList.add("settled-with-balance");
+    }
     // شبکه‌هایی که خطای RPC داشتن هم باز نگه داشته می‌شوند تا کاربر متوجه مشکل بشود،
     // نه فقط شبکه‌های دارای موجودی واقعی
     if (section.container.tagName === "DETAILS") section.container.open = hasBalance || chainHadErrors;
@@ -1005,7 +1019,7 @@ function buildGrandSummary(chainFindings) {
 
 function buildChainSection(chain, tokens, addresses) {
   const isMulti = selectedChainIds.length > 1;
-  let container, contentHost, statusBadge = null;
+  let container, contentHost, statusBadge = null, progressBar = null;
 
   if (isMulti) {
     // در حالت چندشبکه‌ای، از details/summary بومی مرورگر استفاده می‌کنیم تا
@@ -1040,8 +1054,24 @@ function buildChainSection(chain, tokens, addresses) {
     contentHost = container;
   }
 
+  // نوار پیشرفت نازک بالای هر شبکه: کل لیست شبکه‌ها با هم «جاروب» می‌شود و کاربر
+  // می‌بیند هر شبکه چقدر جلو رفته. بعد از پایان محو می‌شود تا جای ثابتی نگیرد.
+  progressBar = document.createElement("div");
+  progressBar.className = "chain-progress";
+  const progressFill = document.createElement("div");
+  progressFill.className = "chain-progress-fill";
+  progressBar.appendChild(progressFill);
+  container.insertBefore(progressBar, container.firstChild);
+
   if (addresses.length === 0) {
-    return { container, rowEls: [], totalsBar: document.createElement("div"), statusBadge };
+    return {
+      container,
+      rowEls: [],
+      totalsBar: document.createElement("div"),
+      statusBadge,
+      progressBar,
+      progressFill,
+    };
   }
 
   const table = document.createElement("table");
@@ -1071,7 +1101,7 @@ function buildChainSection(chain, tokens, addresses) {
   contentHost.appendChild(table);
   contentHost.appendChild(totalsBar);
 
-  return { container, rowEls, totalsBar, statusBadge };
+  return { container, rowEls, totalsBar, statusBadge, progressBar, progressFill };
 }
 
 function buildLoadingRow(address, tokens) {
@@ -1145,11 +1175,24 @@ function fillRow(rowEls, result, tokens) {
   rowEls.nativeTd.innerHTML = "";
   rowEls.nativeTd.appendChild(renderBalanceCell(result.native));
 
+  let rowHasValue = entryHasValue(result.native);
+
   tokens.forEach((token, i) => {
     const tokenResult = result.tokens.find((tk) => tk.address.toLowerCase() === token.address.toLowerCase());
     rowEls.tokenTds[i].innerHTML = "";
     rowEls.tokenTds[i].appendChild(renderBalanceCell(tokenResult));
+    if (entryHasValue(tokenResult)) rowHasValue = true;
   });
+
+  // ردیفی که واقعاً چیزی دارد، لبهٔ امبر می‌گیرد تا هنگام اسکرول در جدول بلند
+  // فوراً پیدا شود. خطا و صفر این نشان را نمی‌گیرند — فقط پول واقعی.
+  rowEls.tr.classList.toggle("has-balance", rowHasValue);
+}
+
+// آیا این آیتم موجودی غیرصفر و قابل‌اعتماد دارد؟ (خطا و صفر هر دو «نه» هستند)
+function entryHasValue(entry) {
+  if (!entry || entry.error) return false;
+  return parseFloat(entry.formatted || "0") > 0;
 }
 
 function renderBalanceCell(entry) {
@@ -1207,6 +1250,8 @@ function renderChainTotals(totalsBar, results, tokens, chain) {
 function buildTotalItem(label, value) {
   const div = document.createElement("div");
   div.className = "total-item";
+  // جمع فقط وقتی سیگنال می‌گیرد که واقعاً چیزی برای جمع‌زدن باشد
+  if (value > 0) div.classList.add("has-value");
   const l = document.createElement("div");
   l.className = "total-label";
   l.textContent = `${t("total")} ${label}`;
@@ -1249,9 +1294,9 @@ function exportCsv() {
 // نسخه رایگان SheetJS قابلیت رنگ/کادر/فونت ندارد. این تنها وابستگی خارجی
 // پروژه است و فقط هنگام کلیک روی این دکمه لود می‌شود.
 
-const XLSX_ACCENT = "FFC9A15A";
-const XLSX_DARK = "FF1E1A13";
-const XLSX_BORDER_COLOR = "FF3A3225";
+const XLSX_ACCENT = "FF7AA2D6"; // تعاملی — همان accent صفحه
+const XLSX_DARK = "FF1C2029";
+const XLSX_BORDER_COLOR = "FF2A303B";
 
 function xlsxThinBorder() {
   const side = { style: "thin", color: { argb: XLSX_BORDER_COLOR } };
@@ -1290,7 +1335,7 @@ async function exportExcel() {
   const titleRow = summarySheet.addRow(["wallet-checker — " + t("reportCardLabel")]);
   titleRow.font = { bold: true, size: 16, color: { argb: XLSX_ACCENT } };
   summarySheet.mergeCells(1, 1, 1, 2);
-  summarySheet.addRow([t("reportGenerated") + ": " + new Date().toLocaleString()]).font = { italic: true, color: { argb: "FF888888" } };
+  summarySheet.addRow([t("reportGenerated") + ": " + new Date().toLocaleString()]).font = { italic: true, color: { argb: "FF98A1B0" } };
   summarySheet.addRow([]);
 
   const headerRow = summarySheet.addRow([t("chainSection"), t("cardTopFind")]);
@@ -1313,7 +1358,7 @@ async function exportExcel() {
       const valuesStr = entries.map((e) => `${formatDisplay(e.total.toString())} ${e.symbol}`).join("  ·  ");
       const row = summarySheet.addRow([chain.name, valuesStr]);
       row.eachCell((cell) => { cell.border = xlsxThinBorder(); });
-      row.getCell(2).font = { color: { argb: "FF8A6A2A" }, bold: true };
+      row.getCell(2).font = { color: { argb: "FFB8860B" }, bold: true };
     });
   }
 
@@ -1324,12 +1369,12 @@ async function exportExcel() {
     if (zeroConfirmed.length > 0) {
       summarySheet.addRow([]);
       const zeroRow = summarySheet.addRow([t("grandSummaryZero"), zeroConfirmed.map((f) => f.chain.name).join(", ")]);
-      zeroRow.font = { italic: true, color: { argb: "FF888888" } };
+      zeroRow.font = { italic: true, color: { argb: "FF98A1B0" } };
     }
 
     if (withErrors.length > 0) {
       const errorRow = summarySheet.addRow(["⚠ " + t("grandSummaryErrors"), withErrors.map((f) => f.chain.name).join(", ")]);
-      errorRow.font = { bold: true, color: { argb: "FFC0654A" } };
+      errorRow.font = { bold: true, color: { argb: "FFC0392B" } };
     }
   }
 
@@ -1341,7 +1386,7 @@ async function exportExcel() {
 
     if (hasErrors) {
       const warnRow = sheet.addRow(["⚠ " + t("grandSummaryErrors") + " " + chain.name]);
-      warnRow.font = { bold: true, color: { argb: "FFC0654A" } };
+      warnRow.font = { bold: true, color: { argb: "FFC0392B" } };
       sheet.mergeCells(warnRow.number, 1, warnRow.number, cols.length);
       sheet.addRow([]);
     }
@@ -1369,15 +1414,15 @@ async function exportExcel() {
       row.eachCell((cell) => { cell.border = xlsxThinBorder(); });
       row.getCell(1).font = { name: "Consolas" };
       row.eachCell((cell, colNum) => {
-        if (cell.value === "ERR") cell.font = { color: { argb: "FFC0654A" }, bold: true };
+        if (cell.value === "ERR") cell.font = { color: { argb: "FFC0392B" }, bold: true };
       });
     });
 
     const totalRow = sheet.addRow([t("total"), ...totals]);
     totalRow.eachCell((cell) => {
-      cell.font = { bold: true, color: { argb: "FF8A6A2A" } };
+      cell.font = { bold: true, color: { argb: "FFB8860B" } };
       cell.border = xlsxThinBorder();
-      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF3E9D2" } };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFF3DC" } };
     });
   });
 
@@ -1518,68 +1563,89 @@ async function renderReportCard() {
   const stats = computeReportCardStats();
   const canvas = reportCardCanvas;
 
-  // ارتفاع کارت متناسب با تعداد شبکه‌های دارای موجودی محاسبه می‌شود، تا هیچ
-  // یافته‌ای (مثل Soneium در تست قبلی) به‌خاطر جای کم حذف نشود.
-  const HEADER_HEIGHT = 330; // برند + هدلاین استیبل‌کوین + ردیف آمار
-  const ROW_HEIGHT = 46;
-  const FOOTER_HEIGHT = 70;
-  const ERROR_LINE_HEIGHT = stats.chainsWithErrors.length > 0 ? 50 : 0;
-  const chainRowsHeight = Math.max(stats.chainFindings.length, 1) * ROW_HEIGHT + 60;
+  // چیدمان عمودی کارت: همان اعداد هم ارتفاع را می‌سازند و هم رسم را جلو می‌برند.
+  // قبلاً ارتفاع با یک فرمول جداگانه و تقریبی حساب می‌شد و با جایی که واقعاً رسم
+  // تمام می‌شد نمی‌خواند — نتیجه‌اش این بود که فوتر برند روی ردیف‌های موجودی
+  // می‌افتاد. حالا یک منبع حقیقت واحد داریم و آن ناهم‌خوانی ساختاراً ممکن نیست.
+  const L = {
+    brandY: 72,
+    headlineY: 180,       // خط اول هدلاین
+    headlineValueGap: 64, // فاصله تا عدد بزرگ
+    afterHeadline: 70,    // از عدد بزرگ تا خط جداکننده
+    afterRule: 50,        // از خط جداکننده تا ردیف آمار
+    statLabelGap: 26,     // از عدد آمار تا برچسبش
+    afterStats: 90,       // از ردیف آمار تا بخش «موجودی قابل‌توجه»
+    afterSectionRule: 40, // از خط جداکننده تا عنوان بخش
+    afterSectionLabel: 36,// از عنوان بخش تا اولین ردیف
+    rowHeight: 46,
+    afterRows: 40,        // از آخرین ردیف تا خط هشدار خطا
+    errorLine: 50,
+    footerGap: 56,        // فضای نفس‌کشیدن بالای فوتر
+  };
+
   const W = 1200;
-  const H = HEADER_HEIGHT + chainRowsHeight + ERROR_LINE_HEIGHT + FOOTER_HEIGHT;
+  const hasFindings = stats.chainFindings.length > 0;
+  const rowsBlock = hasFindings
+    ? L.afterSectionRule + L.afterSectionLabel + stats.chainFindings.length * L.rowHeight
+    : L.afterRows;
+  const errorBlock = stats.chainsWithErrors.length > 0 ? L.afterRows + L.errorLine : 0;
+  const H =
+    L.headlineY + L.headlineValueGap + L.afterHeadline + L.afterRule +
+    L.statLabelGap + L.afterStats + rowsBlock + errorBlock + L.footerGap;
+
   canvas.width = W;
   canvas.height = H;
   const ctx = canvas.getContext("2d");
+  const ROW_HEIGHT = L.rowHeight;
 
   // اطمینان از لود شدن فونت‌های کاستوم قبل از رسم متن روی canvas
   try { await document.fonts.ready; } catch (e) { /* در صورت خطا با فونت پیش‌فرض ادامه می‌دهیم */ }
 
-  const COL_BG = "#17140f";
-  const COL_BORDER = "#3a3225";
-  const COL_TEXT = "#ece3d1";
-  const COL_TEXT_DIM = "#a89a80";
-  const COL_ACCENT = "#c9a15a";
-  const COL_ERROR = "#c0654a";
+  // همان پالت صفحه، تا کارت دانلودی و ابزار یک هویت باشند
+  const COL_BG = "#0f1115";
+  const COL_BORDER = "#2a303b";
+  const COL_TEXT = "#e6e9ee";
+  const COL_TEXT_DIM = "#98a1b0";
+  const COL_ACCENT = "#7aa2d6"; // تعاملی
+  const COL_SIGNAL = "#ffb84d"; // یعنی «اینجا پول هست» — فقط برای همین
+  const COL_ERROR = "#ff7a70";
 
   // پس‌زمینه
   ctx.fillStyle = COL_BG;
   ctx.fillRect(0, 0, W, H);
 
-  // خطوط ظریف افقی، یادآور طرح دفتر حساب خود ابزار
-  ctx.strokeStyle = "rgba(201,161,90,0.05)";
-  ctx.lineWidth = 1;
-  for (let y = 40; y < H; y += 32) {
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(W, y);
-    ctx.stroke();
-  }
+  // هالهٔ ملایم بالا، همان چیزی که در صفحه هم هست
+  const glow = ctx.createRadialGradient(W / 2, -H * 0.1, 0, W / 2, -H * 0.1, W * 0.75);
+  glow.addColorStop(0, "rgba(122,162,214,0.10)");
+  glow.addColorStop(1, "rgba(122,162,214,0)");
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, W, H);
 
   // برند بالای کارت
   ctx.fillStyle = COL_ACCENT;
-  ctx.font = "600 22px 'Inter', sans-serif";
+  ctx.font = "600 22px 'Archivo', sans-serif";
   ctx.textAlign = "left";
   ctx.fillText("◆", 60, 70);
   ctx.fillStyle = COL_TEXT;
-  ctx.font = "600 24px 'Source Serif 4', Georgia, serif";
+  ctx.font = "700 24px 'Archivo', sans-serif";
   ctx.fillText("wallet-checker", 90, 72);
 
   // هدلاین اصلی: مجموع استیبل‌کوین (اگر پیدا شده باشد)
-  let cursorY = 180;
+  let cursorY = L.headlineY;
   if (stats.stablecoinTotal > 0) {
     ctx.fillStyle = COL_TEXT_DIM;
-    ctx.font = "500 20px 'Inter', sans-serif";
+    ctx.font = "500 20px 'Archivo', sans-serif";
     ctx.fillText(`≈ $${stats.stablecoinTotal.toFixed(2)} ${t("cardStablecoinsFound")}`, 60, cursorY);
-    cursorY += 64;
-    ctx.fillStyle = COL_ACCENT;
-    ctx.font = "700 76px 'IBM Plex Mono', monospace";
+    cursorY += L.headlineValueGap;
+    ctx.fillStyle = COL_SIGNAL;
+    ctx.font = "700 76px 'JetBrains Mono', monospace";
     ctx.fillText(`$${stats.stablecoinTotal.toFixed(2)}`, 60, cursorY);
-    cursorY += 70;
+    cursorY += L.afterHeadline;
   } else {
     ctx.fillStyle = COL_TEXT_DIM;
-    ctx.font = "500 22px 'Inter', sans-serif";
+    ctx.font = "500 22px 'Archivo', sans-serif";
     ctx.fillText(t("cardNoStable"), 60, cursorY);
-    cursorY += 70;
+    cursorY += L.afterHeadline;
   }
 
   // خط جداکننده
@@ -1589,7 +1655,7 @@ async function renderReportCard() {
   ctx.moveTo(60, cursorY);
   ctx.lineTo(W - 60, cursorY);
   ctx.stroke();
-  cursorY += 50;
+  cursorY += L.afterRule;
 
   // ردیف آمار کوچک‌تر (سه ستون)
   const statCols = [
@@ -1601,13 +1667,13 @@ async function renderReportCard() {
   statCols.forEach((col, i) => {
     const x = 60 + i * colWidth;
     ctx.fillStyle = COL_TEXT;
-    ctx.font = "700 40px 'IBM Plex Mono', monospace";
+    ctx.font = "700 40px 'JetBrains Mono', monospace";
     ctx.fillText(col.value, x, cursorY);
     ctx.fillStyle = COL_TEXT_DIM;
-    ctx.font = "500 14px 'Inter', sans-serif";
-    ctx.fillText(col.label.toUpperCase(), x, cursorY + 26);
+    ctx.font = "700 12px 'Archivo', sans-serif";
+    ctx.fillText(col.label.toUpperCase(), x, cursorY + L.statLabelGap);
   });
-  cursorY += 90;
+  cursorY += L.afterStats;
 
   // لیست کامل همه شبکه‌های دارای موجودی (بدون محدودیت تعداد؛ دقیقاً مثل جدول
   // خلاصه بالای صفحه، تا هیچ یافته‌ای مثل Soneium حذف نشود)
@@ -1618,12 +1684,12 @@ async function renderReportCard() {
     ctx.moveTo(60, cursorY);
     ctx.lineTo(W - 60, cursorY);
     ctx.stroke();
-    cursorY += 40;
+    cursorY += L.afterSectionRule;
 
     ctx.fillStyle = COL_TEXT_DIM;
-    ctx.font = "500 14px 'Inter', sans-serif";
+    ctx.font = "700 12px 'Archivo', sans-serif";
     ctx.fillText(t("cardTopFind").toUpperCase(), 60, cursorY);
-    cursorY += 36;
+    cursorY += L.afterSectionLabel;
 
     stats.chainFindings.forEach(({ chain, entries }) => {
       // آیکون دایره‌ای رنگی شبکه
@@ -1633,14 +1699,14 @@ async function renderReportCard() {
       ctx.fillStyle = rgb ? `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.25)` : COL_ACCENT;
       ctx.fill();
       ctx.fillStyle = chain.color;
-      ctx.font = "600 13px 'Inter', sans-serif";
+      ctx.font = "600 13px 'Archivo', sans-serif";
       ctx.textAlign = "center";
       ctx.fillText((chain.icon || "●").slice(0, 1), 72, cursorY - 3);
       ctx.textAlign = "left";
 
       // نام شبکه
       ctx.fillStyle = COL_TEXT;
-      ctx.font = "600 17px 'Source Serif 4', Georgia, serif";
+      ctx.font = "600 17px 'Archivo', sans-serif";
       ctx.fillText(chain.name, 100, cursorY);
 
       // مقادیر (ممکن است چند توکن در یک شبکه باشد)
@@ -1650,8 +1716,8 @@ async function renderReportCard() {
           return `${amountStr} ${e.symbol}`;
         })
         .join("   ·   ");
-      ctx.fillStyle = COL_ACCENT;
-      ctx.font = "600 17px 'IBM Plex Mono', monospace";
+      ctx.fillStyle = COL_SIGNAL;
+      ctx.font = "600 17px 'JetBrains Mono', monospace";
       ctx.textAlign = "right";
       ctx.fillText(valuesStr, W - 60, cursorY);
       ctx.textAlign = "left";
@@ -1660,24 +1726,25 @@ async function renderReportCard() {
     });
   } else {
     ctx.fillStyle = COL_TEXT_DIM;
-    ctx.font = "italic 400 16px 'Source Serif 4', Georgia, serif";
-    ctx.fillText(t("grandSummaryNone"), 60, cursorY + 20);
-    cursorY += 20;
+    ctx.font = "400 16px 'Archivo', sans-serif";
+    ctx.fillText(t("grandSummaryNone"), 60, cursorY);
+    cursorY += L.afterRows;
   }
 
   // هشدار شبکه‌هایی که خطای RPC داشتن (داده‌شان قابل اعتماد نیست، صفر واقعی نیست)
   if (stats.chainsWithErrors.length > 0) {
-    cursorY += 34;
+    cursorY += L.afterRows;
     ctx.fillStyle = COL_ERROR;
-    ctx.font = "600 15px 'Inter', sans-serif";
+    ctx.font = "600 15px 'Archivo', sans-serif";
     ctx.fillText(`⚠ ${t("grandSummaryErrors")}: ${stats.chainsWithErrors.join(", ")}`, 60, cursorY);
+    cursorY += L.errorLine;
   }
 
-  // فوتر برند
+  // فوتر برند — از خود cursorY ادامه می‌دهد (نه از H)، تا هرگز روی محتوا نیفتد
   ctx.fillStyle = COL_TEXT_DIM;
-  ctx.font = "400 14px 'Inter', sans-serif";
+  ctx.font = "400 14px 'Archivo', sans-serif";
   ctx.textAlign = "right";
-  ctx.fillText(t("cardBrand"), W - 60, H - 30);
+  ctx.fillText(t("cardBrand"), W - 60, cursorY + L.footerGap - 20);
   ctx.textAlign = "left";
 }
 
